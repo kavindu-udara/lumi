@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Toast colors for night mode -->
+    <color name="toast_success">#FF66BB6A</color>
+    <color name="toast_warning">#FFFFCA28</color>
+    <color name="toast_error">#FFEF5350</color>
+</resources>
+
