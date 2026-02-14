@@ -1,3 +1,13 @@
 <resources>
     <string name="app_name">lumi</string>
+    <string name="sign_in_subtitle">Welcome back!</string>
+    <string name="email_label">Email Address</string>
+    <string name="email_hint">Enter your email</string>
+    <string name="password_label">Password</string>
+    <string name="password_hint">Enter your password</string>
+    <string name="sign_in_button">Sign In</string>
+    <string name="forgot_password">Forgot Password?</string>
+    <string name="or">OR</string>
+    <string name="no_account">Don\'t have an account?</string>
+    <string name="sign_up">Sign Up</string>
 </resources>
