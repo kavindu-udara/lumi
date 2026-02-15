@@ -71,7 +71,7 @@ public class SignIn extends AppCompatActivity {
                     reqObj.addProperty("email", email);
                     reqObj.addProperty("password", password);
 
-                    JsonObject responseObj = API.POST("/login", String.valueOf(reqObj));
+                    JsonObject responseObj = API.POST("/login", reqObj);
                     Log.i("API", "Login successful, message: " + responseObj.toString());
 
                     if (responseObj.get("success").getAsBoolean()) {

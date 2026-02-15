@@ -23,11 +23,11 @@ public class API {
         return BASE_URL;
     }
 
-    public static JsonObject POST(String endpoint, String body) throws IOException, IllegalStateException {
+    public static JsonObject POST(String endpoint, JsonObject reqObj) throws IOException, IllegalStateException {
 //        send a POST request to the API and return the response as a string
         Request request = new Request.Builder()
                 .url(BASE_URL + endpoint)
-                .post(okhttp3.RequestBody.create(body, okhttp3.MediaType.parse("application/json")))
+                .post(okhttp3.RequestBody.create(reqObj.toString(), okhttp3.MediaType.parse("application/json")))
                 .build();
         Response response = new OkHttpClient().newCall(request).execute();
         if (!response.isSuccessful()) throw new RuntimeException("Unexpected code " + response);
