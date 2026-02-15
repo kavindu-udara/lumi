@@ -36,6 +36,15 @@ public class SignIn extends AppCompatActivity {
                 loginButtonOnClick();
             }
         });
+
+        TextView signUpLink = findViewById(R.id.signUpLink);
+        signUpLink.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+//                navigate to sign up activity
+                startActivity(new android.content.Intent(SignIn.this, SignUp.class));
+            }
+        });
     }
 
     private void safeUi(Runnable r) {
