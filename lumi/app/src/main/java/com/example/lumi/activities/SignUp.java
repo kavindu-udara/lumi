@@ -67,7 +67,7 @@ public class SignUp extends AppCompatActivity {
                 reqObj.addProperty("email", email);
                 reqObj.addProperty("password", password);
 
-                JsonObject responseObj = API.POST("/register", reqObj);
+                JsonObject responseObj = API.POST("/auth/register", reqObj);
                 Log.i("SignUp", "Response: " + responseObj.toString());
 
                 if(responseObj.get("success").getAsBoolean()) {
@@ -82,10 +82,9 @@ public class SignUp extends AppCompatActivity {
 
             } catch (Exception e) {
                 e.printStackTrace();
+                Log.i("SignUp", e.getMessage() );
             }
         }).start();
-
-
 
     }
 }

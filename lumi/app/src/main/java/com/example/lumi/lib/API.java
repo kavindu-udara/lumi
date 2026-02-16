@@ -29,8 +29,8 @@ public class API {
                 .url(BASE_URL + endpoint)
                 .post(okhttp3.RequestBody.create(reqObj.toString(), okhttp3.MediaType.parse("application/json")))
                 .build();
+
         Response response = new OkHttpClient().newCall(request).execute();
-        if (!response.isSuccessful()) throw new RuntimeException("Unexpected code " + response);
         Gson gson = new Gson();
         JsonObject responseObj = gson.fromJson(response.body().string(), JsonObject.class);
         return responseObj;
