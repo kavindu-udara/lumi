@@ -28,6 +28,7 @@ public class SignUp extends AppCompatActivity {
         signInLink.setOnClickListener(v -> {
             // navigate to sign in activity
             startActivity(new android.content.Intent(SignUp.this, SignIn.class));
+            finish();
         });
 
         Button signUpButton = findViewById(R.id.signUpButton);

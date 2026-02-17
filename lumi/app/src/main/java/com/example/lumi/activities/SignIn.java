@@ -15,6 +15,7 @@ import androidx.core.view.WindowInsetsCompat;
 
 import com.example.lumi.R;
 import com.example.lumi.lib.API;
+import com.example.lumi.lib.SessionManager;
 import com.example.lumi.lib.Toast;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
@@ -70,8 +71,15 @@ public class SignIn extends AppCompatActivity {
                     Log.i("SignIn", "Login Response, message: " + responseObj.toString());
 
                     if (responseObj.get("success").getAsBoolean()) {
+//                        Store token and user data in session manager
+                        SessionManager sessionManager = new SessionManager(SignIn.this);
+                        sessionManager.saveToken(responseObj.get("token").getAsString());
+                        sessionManager.saveUser(responseObj.getAsJsonObject("user"));
+
                         safeUi(() -> Toast.success(SignIn.this, responseObj.get("message").getAsString()));
                         startActivity(new android.content.Intent(SignIn.this, HomeActivity.class));
+                        finish();
+
                     } else {
                         safeUi(() -> Toast.error(SignIn.this, responseObj.get("message").getAsString()));
                     }
