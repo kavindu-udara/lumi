@@ -1,5 +1,6 @@
 package com.example.lumi.activities;
 
+import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
@@ -30,20 +31,14 @@ public class SignIn extends AppCompatActivity {
         setContentView(R.layout.activity_sign_in);
 
         Button submitButton = findViewById(R.id.signInButton);
-        submitButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                loginButtonOnClick();
-            }
+        submitButton.setOnClickListener(v -> {
+            loginButtonOnClick();
         });
 
         TextView signUpLink = findViewById(R.id.signUpLink);
-        signUpLink.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
+        signUpLink.setOnClickListener(v -> {
 //                navigate to sign up activity
-                startActivity(new android.content.Intent(SignIn.this, SignUp.class));
-            }
+            startActivity(new android.content.Intent(SignIn.this, SignUp.class));
         });
     }
 
@@ -71,18 +66,21 @@ public class SignIn extends AppCompatActivity {
                     reqObj.addProperty("email", email);
                     reqObj.addProperty("password", password);
 
-                    JsonObject responseObj = API.POST("/login", reqObj);
-                    Log.i("API", "Login successful, message: " + responseObj.toString());
+                    JsonObject responseObj = API.POST("/auth/login", reqObj);
+                    Log.i("SignIn", "Login Response, message: " + responseObj.toString());
 
                     if (responseObj.get("success").getAsBoolean()) {
                         safeUi(() -> Toast.success(SignIn.this, responseObj.get("message").getAsString()));
+                        startActivity(new android.content.Intent(SignIn.this, HomeActivity.class));
                     } else {
                         safeUi(() -> Toast.error(SignIn.this, responseObj.get("message").getAsString()));
                     }
 
                 } catch (IOException e) {
+                    e.printStackTrace();
                     safeUi(() -> Toast.error(SignIn.this, "Login Failed : Network Error"));
                 } catch (IllegalStateException e) {
+                    e.printStackTrace();
                     safeUi(() -> Toast.error(SignIn.this, "Login Failed : Invalid Response"));
                 }
             }).start();
