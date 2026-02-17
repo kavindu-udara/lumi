@@ -77,7 +77,7 @@ public class SignIn extends AppCompatActivity {
                         sessionManager.saveUser(responseObj.getAsJsonObject("user"));
 
                         safeUi(() -> Toast.success(SignIn.this, responseObj.get("message").getAsString()));
-                        startActivity(new android.content.Intent(SignIn.this, HomeActivity.class));
+                        startActivity(new android.content.Intent(SignIn.this, MainActivity.class));
                         finish();
 
                     } else {

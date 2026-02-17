@@ -34,6 +34,7 @@ dependencies {
     // Source: https://mvnrepository.com/artifact/com.squareup.okhttp3/okhttp
     implementation("com.squareup.okhttp3:okhttp:5.3.2")
     implementation "androidx.security:security-crypto:1.1.0-alpha06"
+    implementation 'com.google.android.material:material:1.11.0'
 
     implementation libs.appcompat
     implementation libs.material
