@@ -1,17 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:orientation="vertical"
     tools:context=".fragments.HomeFragment">
 
-    <!-- TODO: Update blank fragment layout -->
-    <TextView
+    <view class="androidx.recyclerview.widget.RecyclerView"
+        android:id="@+id/imageGrid"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:text="@string/library"
-        android:textSize="30sp"
-        android:paddingLeft="10dp"
-        />
+        android:visibility="gone">
+    </view>
 
-</FrameLayout>
+</LinearLayout>
