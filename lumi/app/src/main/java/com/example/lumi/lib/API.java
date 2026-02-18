@@ -22,12 +22,6 @@ public class API {
         this.client = new OkHttpClient();
     }
 
-    private String token;
-
-    public void setToken(String token) {
-        this.token = token;
-    }
-
     public String getBaseUrl() {
         return BASE_URL;
     }
