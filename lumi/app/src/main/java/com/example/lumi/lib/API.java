@@ -2,6 +2,8 @@ package com.example.lumi.lib;
 
 import android.util.Log;
 
+import androidx.annotation.Nullable;
+
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
@@ -15,8 +17,15 @@ public class API {
 
     final static String BASE_URL = "http://172.20.10.2:3000/api/v1";
     OkHttpClient client;
+
     public API() {
         this.client = new OkHttpClient();
+    }
+
+    private String token;
+
+    public void setToken(String token) {
+        this.token = token;
     }
 
     public String getBaseUrl() {
@@ -29,6 +38,29 @@ public class API {
                 .url(BASE_URL + endpoint)
                 .post(okhttp3.RequestBody.create(reqObj.toString(), okhttp3.MediaType.parse("application/json")))
                 .build();
+
+        Response response = new OkHttpClient().newCall(request).execute();
+        Gson gson = new Gson();
+        JsonObject responseObj = gson.fromJson(response.body().string(), JsonObject.class);
+        return responseObj;
+    }
+
+    public static JsonObject GET(String endpoint, @Nullable String token) throws IOException, IllegalStateException {
+
+        Request request;
+
+        if (token == null) {
+            request = new Request.Builder()
+                    .url(BASE_URL + endpoint)
+                    .get()
+                    .build();
+        } else {
+            request = new Request.Builder()
+                    .addHeader("Authorization", "Bearer " + token)
+                    .url(BASE_URL + endpoint)
+                    .get()
+                    .build();
+        }
 
         Response response = new OkHttpClient().newCall(request).execute();
         Gson gson = new Gson();

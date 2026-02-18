@@ -23,6 +23,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
+
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
@@ -35,13 +36,13 @@ public class MainActivity extends AppCompatActivity {
             int itemId = item.getItemId();
 
             if(itemId == R.id.nav_home) {
-                selectedFragment = new HomeFragment();
+                selectedFragment = new HomeFragment(this);
             } else if (itemId == R.id.nav_settings) {
-                selectedFragment = new SettingsFragment();
+                selectedFragment = new SettingsFragment(this);
             } else if (itemId == R.id.nav_albums) {
-                selectedFragment = new AlbumsFragment();
+                selectedFragment = new AlbumsFragment(this);
             } else if (itemId == R.id.nav_search) {
-                selectedFragment = new SearchFragment();
+                selectedFragment = new SearchFragment(this);
             }
 
             if (selectedFragment != null) {
@@ -56,7 +57,7 @@ public class MainActivity extends AppCompatActivity {
 //        set default fragment
         if (savedInstanceState == null) {
             getSupportFragmentManager().beginTransaction()
-                    .replace(R.id.fragment_container, new HomeFragment())
+                    .replace(R.id.fragment_container, new HomeFragment(this))
                     .commit();
         }
 
