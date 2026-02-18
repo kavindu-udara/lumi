@@ -1,12 +1,13 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
+import { NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import prisma from "@/lib/db";
+import { getRequestAuthUser } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession();
+    const authUser = await getRequestAuthUser(request);
 
-    if (!session || !session.user?.email) {
+    if (!authUser?.email) {
       return NextResponse.json(
         { error: "Not authenticated" },
         { status: 401 }
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest) {
 
     // Get full user data including provider
     const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
+      where: { email: authUser.email },
       select: {
         id: true,
         email: true,

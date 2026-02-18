@@ -40,7 +40,6 @@ public class HomeFragment extends Fragment {
         new Thread(() -> {
             try {
                 JsonObject responseObj = API.GET("/lib", sessionManager.getToken());
-                System.out.println(responseObj);
 
                 if(responseObj.get("success").getAsBoolean()) {
                     Log.i("Library", "Library Response success: " + responseObj.toString());

@@ -3,6 +3,7 @@ import { findUserByEmail } from "@/actions/user-actions";
 import bcrypt from "bcrypt";
 import { Provider } from "@prisma/client";
 import jwt from "jsonwebtoken";
+import { JWT_SECRET } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
   try {
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
         name: user.name,
         provider: user.provider,
       },
-      process.env.NEXTAUTH_SECRET || "your-secret-key",
+      JWT_SECRET,
       { expiresIn: "30d" }
     );
 
