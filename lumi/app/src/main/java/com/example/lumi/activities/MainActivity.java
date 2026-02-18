@@ -10,7 +10,9 @@ import androidx.core.view.WindowInsetsCompat;
 import androidx.fragment.app.Fragment;
 
 import com.example.lumi.R;
+import com.example.lumi.fragments.AlbumsFragment;
 import com.example.lumi.fragments.HomeFragment;
+import com.example.lumi.fragments.SearchFragment;
 import com.example.lumi.fragments.SettingsFragment;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
@@ -36,6 +38,10 @@ public class MainActivity extends AppCompatActivity {
                 selectedFragment = new HomeFragment();
             } else if (itemId == R.id.nav_settings) {
                 selectedFragment = new SettingsFragment();
+            } else if (itemId == R.id.nav_albums) {
+                selectedFragment = new AlbumsFragment();
+            } else if (itemId == R.id.nav_search) {
+                selectedFragment = new SearchFragment();
             }
 
             if (selectedFragment != null) {

@@ -5,9 +5,9 @@
         android:icon="@drawable/ic_home"
         android:title="@string/library"/>
     <item
-        android:id="@+id/nav_favorites"
+        android:id="@+id/nav_albums"
         android:icon="@drawable/ic_album"
-        android:title="@string/favorites"/>
+        android:title="@string/albums"/>
     <item
         android:id="@+id/nav_search"
         android:icon="@drawable/ic_search"
