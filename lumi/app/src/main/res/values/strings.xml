@@ -21,4 +21,28 @@
     <string name="hello_settings_fragment">Hello settings fragment</string>
     <!-- TODO: Remove or change this placeholder text -->
     <string name="hello_blank_fragment">Hello blank fragment</string>
+    <string name="queued_badge_text">Queued</string>
+    <string name="queued_badge_content_description">Pending upload</string>
+    <string name="settings_title">Settings</string>
+    <string name="change_plan">Change Plan</string>
+    <string name="back">Back</string>
+    <string name="selected_plan_none">Selected plan: none</string>
+    <string name="selected_plan_label">Selected plan: %1$s</string>
+    <string name="plans_load_failed">Failed to load plans</string>
+    <string name="create_album">Create Album</string>
+    <string name="create_new_album">Create New Album</string>
+    <string name="album_name">Album Name</string>
+    <string name="cancel">Cancel</string>
+    <string name="create">Create</string>
+    <string name="album_icon_content_description">Album</string>
+    <string name="albums_load_failed">Failed to load albums</string>
+    <string name="back_to_albums">Back to albums</string>
+    <string name="album_photos_title">Album: %1$s</string>
+    <string name="capture_photo">Capture photo</string>
+    <string name="camera_permission_required">Camera permission is required</string>
+    <string name="upload_photo_failed">Failed to upload photo</string>
+    <string name="record_video">Record video</string>
+    <string name="upload_video_failed">Failed to upload video</string>
+    <string name="photo_uploaded_successfully">Photo uploaded successfully</string>
+    <string name="video_uploaded_successfully">Video uploaded successfully</string>
 </resources>

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "554600545009",
+    "project_id": "lumi-a4048",
+    "storage_bucket": "lumi-a4048.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:554600545009:android:eb8b3206ed4275a9724750",
+        "android_client_info": {
+          "package_name": "com.example.lumi"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBtGTYz90xK_PvPTFBORtYFuHeEGeq-czY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

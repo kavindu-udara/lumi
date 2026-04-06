@@ -1,5 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <color name="purple_200">#FFE3D2DB</color>
+    <color name="purple_500">#FFBFA8B4</color>
+    <color name="purple_700">#FFF8F1F5</color>
+    <color name="teal_200">#FF9D8B95</color>
+    <color name="teal_700">#FFE5D9E0</color>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="gray_300">#FF4A4A4A</color>
+    <color name="gray_400">#FF606060</color>
+    <color name="gray_500">#FF8A8A8A</color>
+    <color name="gray_600">#FFB0B0B0</color>
+
     <!-- Toast colors for night mode -->
     <color name="toast_success">#FF66BB6A</color>
     <color name="toast_warning">#FFFFCA28</color>

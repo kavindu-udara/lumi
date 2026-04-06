@@ -44,3 +44,12 @@ next-env.d.ts
 /app/generated/prisma
 
 /prisma/migrations
+
+data.txt
+
+# minio
+/minio-data
+
+mongodb-data
+
+serviceAccountKey.json

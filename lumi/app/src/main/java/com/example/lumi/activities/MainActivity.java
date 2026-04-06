@@ -1,9 +1,11 @@
 package com.example.lumi.activities;
 
+import android.content.SharedPreferences;
 import android.os.Bundle;
 
 import androidx.activity.EdgeToEdge;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -12,14 +14,23 @@ import androidx.fragment.app.Fragment;
 import com.example.lumi.R;
 import com.example.lumi.fragments.AlbumsFragment;
 import com.example.lumi.fragments.HomeFragment;
-import com.example.lumi.fragments.SearchFragment;
+import com.example.lumi.fragments.MapFragment;
 import com.example.lumi.fragments.SettingsFragment;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
 public class MainActivity extends AppCompatActivity {
 
+    private static final String PREFS_NAME = "lumi_settings";
+    private static final String KEY_DARK_THEME = "dark_theme";
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        boolean darkTheme = prefs.getBoolean(KEY_DARK_THEME, false);
+        AppCompatDelegate.setDefaultNightMode(
+                darkTheme ? AppCompatDelegate.MODE_NIGHT_YES : AppCompatDelegate.MODE_NIGHT_NO
+        );
+
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
@@ -36,13 +47,13 @@ public class MainActivity extends AppCompatActivity {
             int itemId = item.getItemId();
 
             if(itemId == R.id.nav_home) {
-                selectedFragment = new HomeFragment(this);
+                selectedFragment = new HomeFragment();
             } else if (itemId == R.id.nav_settings) {
-                selectedFragment = new SettingsFragment(this);
+                selectedFragment = new SettingsFragment();
             } else if (itemId == R.id.nav_albums) {
-                selectedFragment = new AlbumsFragment(this);
-            } else if (itemId == R.id.nav_search) {
-                selectedFragment = new SearchFragment(this);
+                selectedFragment = new AlbumsFragment();
+            } else if (itemId == R.id.nav_map) {
+                selectedFragment = new MapFragment();
             }
 
             if (selectedFragment != null) {
@@ -57,7 +68,7 @@ public class MainActivity extends AppCompatActivity {
 //        set default fragment
         if (savedInstanceState == null) {
             getSupportFragmentManager().beginTransaction()
-                    .replace(R.id.fragment_container, new HomeFragment(this))
+                    .replace(R.id.fragment_container, new HomeFragment())
                     .commit();
         }
 

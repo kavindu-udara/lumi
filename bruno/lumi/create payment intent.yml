@@ -1,0 +1,19 @@
+info:
+  name: create payment intent
+  type: http
+  seq: 9
+
+http:
+  method: POST
+  url: http://localhost:3000/api/v1/payments/create-intent
+  body:
+    type: json
+    data: |
+      {"amount":500,"currency":"usd","planId":"YOUR_PLAN_ID","firebaseUserId":"YOUR_UID"}
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

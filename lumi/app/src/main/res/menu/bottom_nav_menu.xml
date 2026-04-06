@@ -9,11 +9,11 @@
         android:icon="@drawable/ic_album"
         android:title="@string/albums"/>
     <item
-        android:id="@+id/nav_search"
-        android:icon="@drawable/ic_search"
-        android:title="@string/search"/>
+        android:id="@+id/nav_map"
+        android:icon="@android:drawable/ic_dialog_map"
+        android:title="Map"/>
     <item
         android:id="@+id/nav_settings"
         android:icon="@drawable/ic_settings"
-        android:title="@string/search"/>
+        android:title="@string/settings"/>
 </menu>
