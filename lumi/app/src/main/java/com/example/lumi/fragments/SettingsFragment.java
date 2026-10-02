@@ -24,10 +24,10 @@ import com.example.lumi.R;
 import com.example.lumi.activities.SignIn;
 import com.example.lumi.lib.API;
 import com.example.lumi.lib.SessionManager;
+import com.example.lumi.lib.Toast;
 import com.google.android.material.card.MaterialCardView;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
-import com.google.firebase.auth.UserProfileChangeRequest;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
@@ -293,34 +293,31 @@ public class SettingsFragment extends Fragment {
         updateProfileButton.setLayoutParams(buttonLp);
         root.addView(updateProfileButton);
 
-        FirebaseUser user = firebaseAuth.getCurrentUser();
         String supabaseToken = sessionManager.getToken();
-        if (user == null) {
+        JsonObject sessionUser = sessionManager.getUser();
+        String email = sessionUser != null && sessionUser.has("email")
+                ? sessionUser.get("email").getAsString() : "-";
+        emailText.setText("Email: " + email);
+        if (sessionUser != null && sessionUser.has("user_metadata")
+                && sessionUser.get("user_metadata").isJsonObject()) {
+            JsonObject metadata = sessionUser.getAsJsonObject("user_metadata");
+            if (metadata.has("displayName") && !metadata.get("displayName").isJsonNull()) {
+                nameInput.setText(metadata.get("displayName").getAsString());
+            }
+        }
+
+        if (supabaseToken == null || supabaseToken.trim().isEmpty()) {
             updateProfileButton.setEnabled(false);
             nameInput.setEnabled(false);
-            JsonObject sessionUser = sessionManager.getUser();
-            String email = sessionUser != null && sessionUser.has("email")
-                    ? sessionUser.get("email").getAsString() : "-";
-            emailText.setText("Email: " + email);
-            if (supabaseToken == null || supabaseToken.trim().isEmpty()) {
-                usageProgress.setIndeterminate(false);
-                usageProgress.setProgress(0);
-                usagePlanText.setText("Plan: not available");
-                usageAmountText.setText("Used: not available");
-                usageStatusText.setText("Sign in to view usage");
-            } else {
-                loadUsage(usageProgress, usagePlanText, usageAmountText, usageStatusText);
-            }
+            usageProgress.setIndeterminate(false);
+            usageProgress.setProgress(0);
+            usagePlanText.setText("Plan: not available");
+            usageAmountText.setText("Used: not available");
+            usageStatusText.setText("Sign in to view usage");
             return root;
         }
 
         loadUsage(usageProgress, usagePlanText, usageAmountText, usageStatusText);
-
-        String email = user.getEmail() == null ? "-" : user.getEmail();
-        emailText.setText("Email: " + email);
-        if (user.getDisplayName() != null) {
-            nameInput.setText(user.getDisplayName());
-        }
 
         updateProfileButton.setOnClickListener(v -> {
             String displayName = nameInput.getText() == null ? "" : nameInput.getText().toString().trim();
@@ -330,20 +327,42 @@ public class SettingsFragment extends Fragment {
                 return;
             }
 
-            UserProfileChangeRequest.Builder profileBuilder = new UserProfileChangeRequest.Builder()
-                    .setDisplayName(displayName);
-
-
             updateProfileButton.setEnabled(false);
-            user.updateProfile(profileBuilder.build())
-                    .addOnSuccessListener(unused -> {
+            new Thread(() -> {
+                try {
+                    JsonObject body = new JsonObject();
+                    body.addProperty("displayName", displayName);
+                    JsonElement response = API.PUT("/profile", supabaseToken, body);
+                    if (response == null) {
+                        throw new IOException("Empty profile response");
+                    }
+                    JsonObject updatedUser = response.isJsonObject()
+                            ? response.getAsJsonObject() : null;
+                    if (updatedUser != null && updatedUser.has("user")
+                            && updatedUser.get("user").isJsonObject()) {
+                        updatedUser = updatedUser.getAsJsonObject("user");
+                    }
+                    if (updatedUser != null && updatedUser.has("id")) {
+                        sessionManager.saveUser(updatedUser);
+                    } else if (sessionUser != null) {
+                        JsonObject metadata = sessionUser.has("user_metadata")
+                                && sessionUser.get("user_metadata").isJsonObject()
+                                ? sessionUser.getAsJsonObject("user_metadata") : new JsonObject();
+                        metadata.addProperty("displayName", displayName);
+                        sessionUser.add("user_metadata", metadata);
+                        sessionManager.saveUser(sessionUser);
+                    }
+                    safeUi(() -> {
                         updateProfileButton.setEnabled(true);
-                        android.widget.Toast.makeText(requireContext(), "Profile updated", android.widget.Toast.LENGTH_SHORT).show();
-                    })
-                    .addOnFailureListener(error -> {
-                        updateProfileButton.setEnabled(true);
-                        android.widget.Toast.makeText(requireContext(), "Profile update failed", android.widget.Toast.LENGTH_SHORT).show();
+                        Toast.success(parent, "Profile updated");
                     });
+                } catch (Exception error) {
+                    safeUi(() -> {
+                        updateProfileButton.setEnabled(true);
+                        Toast.error(parent, "Profile update failed");
+                    });
+                }
+            }).start();
         });
 
         return root;
