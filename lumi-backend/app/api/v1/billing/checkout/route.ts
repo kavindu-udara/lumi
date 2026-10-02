@@ -5,6 +5,12 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
+function errorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error) return String(error.message);
+  return "Failed to create checkout session";
+}
+
 export async function POST(request: NextRequest) {
   try {
     const user = await getAuthenticatedUser(request);
@@ -41,7 +47,8 @@ export async function POST(request: NextRequest) {
     return Response.json({ sessionId: session.id, url: session.url }, { status: 200 });
   } catch (error) {
     if (error instanceof AuthError) return Response.json({ error: error.message }, { status: error.status });
-    const message = error instanceof Error ? error.message : "Failed to create checkout session";
+    const message = errorMessage(error);
+    console.error("Stripe checkout session creation failed", { message });
     return Response.json({ error: message }, { status: 500 });
   }
 }
