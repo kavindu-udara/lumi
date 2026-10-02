@@ -41,6 +41,7 @@ public class SettingsFragment extends Fragment {
 
     AppCompatActivity parent;
     private FirebaseAuth firebaseAuth;
+    private SessionManager sessionManager;
 
     public SettingsFragment() {
         // Required empty public constructor for Fragment recreation.
@@ -62,6 +63,7 @@ public class SettingsFragment extends Fragment {
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
         firebaseAuth = FirebaseAuth.getInstance();
+        sessionManager = new SessionManager(requireContext());
         SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE);
         boolean isDarkTheme = prefs.getBoolean(KEY_DARK_THEME, false);
         int onSurfaceColor = resolveThemeColor(com.google.android.material.R.attr.colorOnSurface, android.graphics.Color.BLACK);
@@ -292,19 +294,27 @@ public class SettingsFragment extends Fragment {
         root.addView(updateProfileButton);
 
         FirebaseUser user = firebaseAuth.getCurrentUser();
+        String supabaseToken = sessionManager.getToken();
         if (user == null) {
             updateProfileButton.setEnabled(false);
             nameInput.setEnabled(false);
-            emailText.setText("Email: not signed in");
-            usageProgress.setIndeterminate(false);
-            usageProgress.setProgress(0);
-            usagePlanText.setText("Plan: not available");
-            usageAmountText.setText("Used: not available");
-            usageStatusText.setText("Sign in to view usage");
+            JsonObject sessionUser = sessionManager.getUser();
+            String email = sessionUser != null && sessionUser.has("email")
+                    ? sessionUser.get("email").getAsString() : "-";
+            emailText.setText("Email: " + email);
+            if (supabaseToken == null || supabaseToken.trim().isEmpty()) {
+                usageProgress.setIndeterminate(false);
+                usageProgress.setProgress(0);
+                usagePlanText.setText("Plan: not available");
+                usageAmountText.setText("Used: not available");
+                usageStatusText.setText("Sign in to view usage");
+            } else {
+                loadUsage(usageProgress, usagePlanText, usageAmountText, usageStatusText);
+            }
             return root;
         }
 
-        loadUsage(user, usageProgress, usagePlanText, usageAmountText, usageStatusText);
+        loadUsage(usageProgress, usagePlanText, usageAmountText, usageStatusText);
 
         String email = user.getEmail() == null ? "-" : user.getEmail();
         emailText.setText("Email: " + email);
@@ -365,21 +375,16 @@ public class SettingsFragment extends Fragment {
     }
 
     private void loadUsage(
-            FirebaseUser user,
             ProgressBar usageProgress,
             TextView usagePlanText,
             TextView usageAmountText,
             TextView usageStatusText
     ) {
-        user.getIdToken(false).addOnCompleteListener(tokenTask -> {
-            if (!tokenTask.isSuccessful() || tokenTask.getResult() == null) {
-                usageProgress.setIndeterminate(false);
-                usageProgress.setProgress(0);
-                usageStatusText.setText("Failed to load usage");
-                return;
-            }
-
-            String token = tokenTask.getResult().getToken();
+        String token = sessionManager.getToken();
+        if (token == null || token.trim().isEmpty()) {
+            postUsageUnavailable(usageProgress, usagePlanText, usageAmountText, usageStatusText);
+            return;
+        }
             String endpoint = "/usage";
 
             new Thread(() -> {
@@ -399,15 +404,17 @@ public class SettingsFragment extends Fragment {
                         return;
                     }
 
-                    JsonObject planObj = subscription.has("planId") && subscription.get("planId").isJsonObject()
-                            ? subscription.getAsJsonObject("planId")
+                    JsonObject planObj = subscription.has("plans") && subscription.get("plans").isJsonObject()
+                            ? subscription.getAsJsonObject("plans")
                             : null;
 
                     String planName = planObj != null && planObj.has("name") && !planObj.get("name").isJsonNull()
                             ? planObj.get("name").getAsString()
                             : "Unknown";
-                    long storageLimit = planObj != null ? getLongValue(planObj, "storageLimit") : 0L;
-                    Long usedBytes = findUsedBytes(responseObj, subscription);
+                    long storageLimit = responseObj.has("usage") && responseObj.get("usage").isJsonObject()
+                            ? getLongValue(responseObj.getAsJsonObject("usage"), "limitBytes") : 0L;
+                    Long usedBytes = responseObj.has("usage") && responseObj.get("usage").isJsonObject()
+                            ? getOptionalLong(responseObj.getAsJsonObject("usage"), "usedBytes") : null;
 
                     safeUi(() -> {
                         usagePlanText.setText("Plan: " + planName);
@@ -431,14 +438,18 @@ public class SettingsFragment extends Fragment {
                         long clampedUsed = Math.max(0L, usedBytes);
                         int percent = (int) Math.min(100L, (clampedUsed * 100L) / storageLimit);
                         usageProgress.setProgress(percent);
-                        usageAmountText.setText("Used: " + formatBytes(clampedUsed) + " / " + formatBytes(storageLimit));
+                        usageAmountText.setText("Used: " + formatGigabytes(clampedUsed)
+                                + " GB / " + formatGigabytes(storageLimit) + " GB");
                         usageStatusText.setText(percent + "% used");
                     });
                 } catch (IOException e) {
                     postUsageUnavailable(usageProgress, usagePlanText, usageAmountText, usageStatusText);
                 }
             }).start();
-        });
+    }
+
+    private String formatGigabytes(long bytes) {
+        return String.format(Locale.US, "%.2f", bytes / (1024d * 1024d * 1024d));
     }
 
     private void postUsageUnavailable(
