@@ -9,8 +9,11 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.model.GlideUrl;
+import com.bumptech.glide.load.model.LazyHeaders;
 import com.bumptech.glide.request.RequestOptions;
 import com.example.lumi.lib.API;
+import com.example.lumi.lib.SessionManager;
 import com.example.lumi.views.ZoomableImageView;
 
 import java.io.File;
@@ -58,9 +61,12 @@ public class PhotoViewerPagerAdapter extends RecyclerView.Adapter<PhotoViewerPag
             return;
         }
 
-        String url = new API().getBaseUrl() + "/photos/preview/" + item.getImageId();
+        String url = item.getPreviewUrl(new API(), new SessionManager(context));
+        GlideUrl glideUrl = new GlideUrl(url, new LazyHeaders.Builder()
+                .addHeader("Authorization", "Bearer " + new SessionManager(context).getToken())
+                .build());
         Glide.with(context)
-                .load(url)
+                .load(glideUrl)
                 .apply(requestOptions)
                 .into(holder.imageView);
     }
@@ -86,4 +92,3 @@ public class PhotoViewerPagerAdapter extends RecyclerView.Adapter<PhotoViewerPag
         }
     }
 }
-

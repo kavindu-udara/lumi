@@ -12,8 +12,11 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.model.GlideUrl;
+import com.bumptech.glide.load.model.LazyHeaders;
 import com.bumptech.glide.request.RequestOptions;
 import com.example.lumi.lib.API;
+import com.example.lumi.lib.SessionManager;
 
 import java.io.File;
 import java.io.Serializable;
@@ -92,9 +95,12 @@ public class HomeGalleryAdapter extends RecyclerView.Adapter<HomeGalleryAdapter.
         }
 
         if (item.getImageId() != null && !item.getImageId().trim().isEmpty()) {
-            String url = new API().getBaseUrl() + "/photos/preview/" + item.getImageId();
+            String url = item.getPreviewUrl(new API(), new SessionManager(context));
+            GlideUrl glideUrl = new GlideUrl(url, new LazyHeaders.Builder()
+                    .addHeader("Authorization", "Bearer " + new SessionManager(context).getToken())
+                    .build());
             Glide.with(context)
-                    .load(url)
+                    .load(glideUrl)
                     .apply(requestOptions)
                     .into(holder.imageView);
         }
@@ -131,6 +137,7 @@ public class HomeGalleryAdapter extends RecyclerView.Adapter<HomeGalleryAdapter.
     public static class GalleryItem implements Serializable {
         private final String photoId;
         private final String imageId;
+        private final String albumId;
         private final String localPath;
         private final long createdAt;
         private final String queueId;
@@ -140,6 +147,7 @@ public class HomeGalleryAdapter extends RecyclerView.Adapter<HomeGalleryAdapter.
         private GalleryItem(
                 String photoId,
                 String imageId,
+                String albumId,
                 String localPath,
                 long createdAt,
                 String queueId,
@@ -148,6 +156,7 @@ public class HomeGalleryAdapter extends RecyclerView.Adapter<HomeGalleryAdapter.
         ) {
             this.photoId = photoId;
             this.imageId = imageId;
+            this.albumId = albumId;
             this.localPath = localPath;
             this.createdAt = createdAt;
             this.queueId = queueId;
@@ -156,11 +165,15 @@ public class HomeGalleryAdapter extends RecyclerView.Adapter<HomeGalleryAdapter.
         }
 
         public static GalleryItem remote(String photoId, String imageId, long createdAt, Double latitude, Double longitude) {
-            return new GalleryItem(photoId, imageId, null, createdAt, null, latitude, longitude);
+            return remote(photoId, imageId, null, createdAt, latitude, longitude);
+        }
+
+        public static GalleryItem remote(String photoId, String imageId, String albumId, long createdAt, Double latitude, Double longitude) {
+            return new GalleryItem(photoId, imageId, albumId, null, createdAt, null, latitude, longitude);
         }
 
         public static GalleryItem local(String queueId, String localPath, long createdAt, Double latitude, Double longitude) {
-            return new GalleryItem(null, null, localPath, createdAt, queueId, latitude, longitude);
+            return new GalleryItem(null, null, null, localPath, createdAt, queueId, latitude, longitude);
         }
 
         public String getPhotoId() {
@@ -169,6 +182,20 @@ public class HomeGalleryAdapter extends RecyclerView.Adapter<HomeGalleryAdapter.
 
         public String getImageId() {
             return imageId;
+        }
+
+        public String getAlbumId() {
+            return albumId;
+        }
+
+        public String getPreviewUrl(API api, SessionManager sessionManager) {
+            if (imageId != null && imageId.contains("/")) {
+                return api.getPreviewUrl(imageId);
+            }
+
+            String userId = sessionManager.getUser() != null && sessionManager.getUser().has("id")
+                    ? sessionManager.getUser().get("id").getAsString() : "";
+            return api.getPreviewUrl(userId, albumId, imageId);
         }
 
         public String getLocalPath() {
@@ -196,4 +223,3 @@ public class HomeGalleryAdapter extends RecyclerView.Adapter<HomeGalleryAdapter.
         }
     }
 }
-

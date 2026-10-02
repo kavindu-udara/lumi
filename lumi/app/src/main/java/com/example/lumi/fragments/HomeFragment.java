@@ -39,8 +39,6 @@ import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.Priority;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
-import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseUser;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -77,8 +75,6 @@ public class HomeFragment extends Fragment {
     private File pendingCaptureFile;
     private File pendingVideoFile;
 
-    private FirebaseAuth mAuth;
-
     public HomeFragment() {
         // Required empty public constructor for Fragment recreation.
     }
@@ -99,8 +95,6 @@ public class HomeFragment extends Fragment {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         registerLaunchers();
-//        init firebase auth
-        mAuth = FirebaseAuth.getInstance();
     }
 
     @Override
@@ -317,10 +311,7 @@ public class HomeFragment extends Fragment {
         getCurrentLocation(location -> {
             long createdAt = System.currentTimeMillis();
             String date = new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date(createdAt));
-            String userId = "anonymous";
-            if (FirebaseAuth.getInstance().getCurrentUser() != null) {
-                userId = FirebaseAuth.getInstance().getCurrentUser().getUid();
-            }
+            String userId = sessionUserId();
 
             QueuedUploadItem item = new QueuedUploadItem(
                     UUID.randomUUID().toString(),
@@ -344,10 +335,7 @@ public class HomeFragment extends Fragment {
         getCurrentLocation(location -> {
             long createdAt = System.currentTimeMillis();
             String date = new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date(createdAt));
-            String userId = "anonymous";
-            if (FirebaseAuth.getInstance().getCurrentUser() != null) {
-                userId = FirebaseAuth.getInstance().getCurrentUser().getUid();
-            }
+            String userId = sessionUserId();
 
             QueuedUploadItem item = new QueuedUploadItem(
                     UUID.randomUUID().toString(),
@@ -396,38 +384,15 @@ public class HomeFragment extends Fragment {
         loadingIndicator.setVisibility(View.VISIBLE);
         imageGrid.setVisibility(View.GONE);
 
-        FirebaseUser currentUser = mAuth.getCurrentUser();
-        if (currentUser == null) {
+        String token = sessionManager.getToken();
+        if (token == null || token.trim().isEmpty()) {
             loadingIndicator.setVisibility(View.GONE);
             imageGrid.setVisibility(View.VISIBLE);
             Toast.error("User not authenticated");
             return;
         }
 
-        currentUser.getIdToken(false).addOnCompleteListener(task -> {
-            if (!task.isSuccessful() || task.getResult() == null) {
-                Log.w("HomeFragment", "Failed to get session token", task.getException());
-                safeUi(() -> {
-                    loadingIndicator.setVisibility(View.GONE);
-                    imageGrid.setVisibility(View.VISIBLE);
-                    renderMergedGallery();
-                    Toast.error("Failed to authenticate request");
-                });
-                return;
-            }
-
-            String token = task.getResult().getToken();
-            if (token == null || token.trim().isEmpty()) {
-                safeUi(() -> {
-                    loadingIndicator.setVisibility(View.GONE);
-                    imageGrid.setVisibility(View.VISIBLE);
-                    renderMergedGallery();
-                    Toast.error("Invalid session token");
-                });
-                return;
-            }
-
-            new Thread(() -> {
+        new Thread(() -> {
                 try {
                     JsonElement response = API.GET( "/photos", token);
                     List<HomeGalleryAdapter.GalleryItem> apiPhotos = extractPhotoSources(response);
@@ -451,35 +416,29 @@ public class HomeFragment extends Fragment {
                     });
                 }
             }).start();
-        });
     }
 
     private void enqueueUploadWorker() {
-        FirebaseUser currentUser = mAuth.getCurrentUser();
-        if (currentUser == null) {
+        String token = sessionManager.getToken();
+        if (token == null || token.trim().isEmpty()) {
             return;
         }
 
-        String firebaseUserId = currentUser.getUid();
-        currentUser.getIdToken(false).addOnCompleteListener(task -> {
-            if (!task.isSuccessful() || task.getResult() == null) {
-                Log.w("HomeFragment", "Failed to start upload queue: missing token", task.getException());
-                return;
-            }
-
-            String token = task.getResult().getToken();
-            if (token == null || token.trim().isEmpty() || !isAdded()) {
-                return;
-            }
-
-            UploadQueueWorker.enqueue(requireContext(), firebaseUserId, token);
-        });
+        if (!isAdded()) {
+            return;
+        }
+        UploadQueueWorker.enqueue(requireContext(), token);
     }
 
     private void renderMergedGallery() {
         List<HomeGalleryAdapter.GalleryItem> merged = mergeRemoteAndQueuedPhotos(remotePhotoItems, uploadQueueStore.getAll());
         adapter.setPhotos(merged);
         imageGrid.setVisibility(View.VISIBLE);
+    }
+
+    private String sessionUserId() {
+        JsonObject user = sessionManager.getUser();
+        return user != null && user.has("id") ? user.get("id").getAsString() : "supabase";
     }
 
     private void openPhotoViewer(int startIndex) {
@@ -556,6 +515,8 @@ public class HomeFragment extends Fragment {
             }
 
             long createdAt = parseTimestamp(photoObj);
+            String albumId = photoObj.has("albumId") && !photoObj.get("albumId").isJsonNull()
+                    ? photoObj.get("albumId").getAsString() : null;
             Double latitude = null;
             Double longitude = null;
             if (photoObj.has("location") && photoObj.get("location").isJsonObject()) {
@@ -567,7 +528,7 @@ public class HomeFragment extends Fragment {
                     longitude = location.get("longitude").getAsDouble();
                 }
             }
-            sources.add(HomeGalleryAdapter.GalleryItem.remote(photoId, imageId, createdAt, latitude, longitude));
+            sources.add(HomeGalleryAdapter.GalleryItem.remote(photoId, imageId, albumId, createdAt, latitude, longitude));
         }
 
         return sources;

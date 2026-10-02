@@ -576,7 +576,7 @@ public class AlbumsFragment extends Fragment {
                 }
             }
 
-            sources.add(HomeGalleryAdapter.GalleryItem.remote(photoId, imageId, createdAt, latitude, longitude));
+            sources.add(HomeGalleryAdapter.GalleryItem.remote(photoId, imageId, selectedAlbumId, createdAt, latitude, longitude));
         }
 
         return sources;

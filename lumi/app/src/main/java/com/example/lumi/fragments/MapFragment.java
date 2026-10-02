@@ -20,12 +20,15 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.model.GlideUrl;
+import com.bumptech.glide.load.model.LazyHeaders;
 import com.bumptech.glide.request.target.CustomTarget;
 import com.bumptech.glide.request.transition.Transition;
 import com.example.lumi.R;
 import com.example.lumi.activities.PhotoViewerActivity;
 import com.example.lumi.adapters.HomeGalleryAdapter;
 import com.example.lumi.lib.API;
+import com.example.lumi.lib.SessionManager;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -262,7 +265,13 @@ public class MapFragment extends Fragment {
             return;
         }
 
-        String previewUrl = new API().getBaseUrl() + "/photos/preview/" + imageId;
+        SessionManager sessionManager = new SessionManager(requireContext());
+        GlideUrl previewUrl = new GlideUrl(
+            new API().getPreviewUrl(imageId),
+            new LazyHeaders.Builder()
+                .addHeader("Authorization", "Bearer " + sessionManager.getToken())
+                .build()
+        );
 
         Glide.with(requireContext())
                 .asBitmap()

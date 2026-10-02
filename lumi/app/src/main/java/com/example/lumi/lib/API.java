@@ -8,10 +8,11 @@ import com.example.lumi.BuildConfig;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonPrimitive;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 import okhttp3.MediaType;
 import okhttp3.MultipartBody;
@@ -31,6 +32,37 @@ public class API {
 
     public String getBaseUrl() {
         return BASE_URL;
+    }
+
+    public String getPreviewUrl(String userId, String albumId, String fileName) {
+        if (userId == null || userId.isEmpty() || albumId == null || albumId.isEmpty()
+                || fileName == null || fileName.isEmpty()) {
+            throw new IllegalArgumentException("Preview URL requires userId, albumId, and fileName");
+        }
+        return getPreviewUrl(userId + "/" + albumId + "/" + fileName);
+    }
+
+    public String getPreviewUrl(String storagePath) {
+        if (storagePath == null || storagePath.trim().isEmpty()) {
+            throw new IllegalArgumentException("Preview URL requires a storage path");
+        }
+
+        StringBuilder encodedPath = new StringBuilder();
+        for (String segment : storagePath.split("/")) {
+            if (segment.isEmpty()) {
+                continue;
+            }
+            if (encodedPath.length() > 0) {
+                encodedPath.append('/');
+            }
+            encodedPath.append(encodePathSegment(segment));
+        }
+
+        return BASE_URL + "/photos/preview/" + encodedPath;
+    }
+
+    private static String encodePathSegment(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
     }
 
     private static String normalizedBaseUrl() {
@@ -177,11 +209,7 @@ public class API {
                 );
 
         if (metadata != null) {
-            for (String key : metadata.keySet()) {
-                if (metadata.get(key) instanceof JsonPrimitive) {
-                    multipartBuilder.addFormDataPart(key, metadata.get(key).getAsString());
-                }
-            }
+            multipartBuilder.addFormDataPart("metadata", metadata.toString());
         }
 
         Request.Builder requestBuilder = new Request.Builder()
