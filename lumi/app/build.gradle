@@ -34,6 +34,8 @@ android {
                 "\"${configValue("SUPABASE_URL")}\""
         buildConfigField "String", "SUPABASE_PUBLISHABLE_KEY",
                 "\"${configValue("SUPABASE_PUBLISHABLE_KEY")}\""
+        buildConfigField "String", "API_BASE_URL",
+                "\"${configValue("API_BASE_URL")}\""
     }
 
     buildTypes {

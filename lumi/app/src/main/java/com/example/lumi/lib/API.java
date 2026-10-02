@@ -4,6 +4,7 @@ import android.util.Log;
 
 import androidx.annotation.Nullable;
 
+import com.example.lumi.BuildConfig;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -21,7 +22,7 @@ import okhttp3.Response;
 
 public class API {
 
-    final static String BASE_URL = "http://172.20.10.2:3000/api/v1";
+    private static final String BASE_URL = normalizedBaseUrl();
     OkHttpClient client;
 
     public API() {
@@ -30,6 +31,22 @@ public class API {
 
     public String getBaseUrl() {
         return BASE_URL;
+    }
+
+    private static String normalizedBaseUrl() {
+        String configuredUrl = BuildConfig.API_BASE_URL == null
+                ? "" : BuildConfig.API_BASE_URL.trim();
+        while (configuredUrl.endsWith("/")) {
+            configuredUrl = configuredUrl.substring(0, configuredUrl.length() - 1);
+        }
+        if (configuredUrl.isEmpty()) {
+            throw new IllegalStateException(
+                    "API_BASE_URL is missing. Add it to .env and rebuild the app.");
+        }
+        if (!configuredUrl.endsWith("/api/v1")) {
+            configuredUrl += "/api/v1";
+        }
+        return configuredUrl;
     }
 
     public static JsonObject POST(String endpoint, JsonObject reqObj) throws IOException, IllegalStateException {
@@ -82,7 +99,8 @@ public class API {
     public static JsonElement GET(String endpoint, @Nullable String token) throws IOException, IllegalStateException {
 
         Request request;
-        Log.i("API", "GET request to: " + BASE_URL + endpoint + ", with token: " + token);
+        Log.i("API", "GET request to: " + BASE_URL + endpoint
+                + ", authenticated: " + (token != null));
 
         if (token == null) {
             request = new Request.Builder()
@@ -180,5 +198,3 @@ public class API {
         }
     }
 }
-
-
