@@ -2,69 +2,60 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { decodeToken, TokenPayload } from "@/lib/jwt";
+
+type AdminData = {
+  adminId: string;
+  username?: string;
+};
 
 export const useAdminAuth = () => {
   const router = useRouter();
   const [authState, setAuthState] = useState<{
     isAuthenticated: boolean;
-    adminData: TokenPayload | null;
+    adminData: AdminData | null;
     loading: boolean;
-  }>(() => {
-    if (typeof window === "undefined") {
-      return { isAuthenticated: false, adminData: null, loading: true };
-    }
-
-    const token = localStorage.getItem("adminToken");
-    const userData = localStorage.getItem("adminUser");
-
-    if (token && userData) {
-      const decoded = decodeToken(token);
-      if (decoded) {
-        return { isAuthenticated: true, adminData: decoded, loading: false };
-      }
-    }
-
-    return { isAuthenticated: false, adminData: null, loading: false };
-  });
+  }>({ isAuthenticated: false, adminData: null, loading: true });
 
   useEffect(() => {
-    if (!authState.loading && !authState.isAuthenticated) {
-      localStorage.removeItem("adminToken");
-      localStorage.removeItem("adminUser");
+    const token = getAdminToken();
+    if (!token) {
+      setAuthState({ isAuthenticated: false, adminData: null, loading: false });
       router.push("/login");
+      return;
     }
-  }, [authState.isAuthenticated, authState.loading, router]);
+
+    fetch("/api/v1/admin/verify-token", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Invalid session");
+        const data = await response.json() as { admin: AdminData };
+        setAuthState({ isAuthenticated: true, adminData: data.admin, loading: false });
+      })
+      .catch(() => {
+        localStorage.removeItem("adminToken");
+        localStorage.removeItem("adminUser");
+        setAuthState({ isAuthenticated: false, adminData: null, loading: false });
+        router.push("/login");
+      });
+  }, [router]);
 
   const logout = () => {
-    fetch("/api/v1/admin/logout", { method: "POST" }).catch(() => {
-      // Ignore network errors and continue local logout cleanup
-    });
+    fetch("/api/v1/admin/logout", { method: "POST" }).catch(() => undefined);
     localStorage.removeItem("adminToken");
     localStorage.removeItem("adminUser");
     setAuthState({ isAuthenticated: false, adminData: null, loading: false });
     router.push("/login");
   };
 
-  return {
-    isAuthenticated: authState.isAuthenticated,
-    adminData: authState.adminData,
-    loading: authState.loading,
-    logout,
-  };
+  return { ...authState, logout };
 };
 
-export const getAdminToken = (): string | null => {
-  if (typeof window !== "undefined") {
-    return localStorage.getItem("adminToken");
-  }
-  return null;
-};
+export const getAdminToken = (): string | null =>
+  typeof window === "undefined" ? null : localStorage.getItem("adminToken");
 
 export const getAdminUser = () => {
-  if (typeof window !== "undefined") {
-    const user = localStorage.getItem("adminUser");
-    return user ? JSON.parse(user) : null;
-  }
-  return null;
+  if (typeof window === "undefined") return null;
+  const user = localStorage.getItem("adminUser");
+  return user ? JSON.parse(user) : null;
 };

@@ -1,127 +1,141 @@
-import { verifyFirebaseUser } from "@/lib/auth/firebase-user-auth";
-import connectDB from "@/lib/db";
-import { minioClient } from "@/lib/minio-client";
-import Album from "@/models/album.model";
-import Image from "@/models/image.model";
-import Storage from "@/models/storage.model";
 import { NextRequest } from "next/server";
+import { AuthError, getAuthenticatedUser } from "@/lib/auth/supabase-user-auth";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+type ImageRow = {
+  id: string;
+  user_id: string;
+  album_id: string;
+  storage_path: string;
+  original_name: string;
+  mime_type: string;
+  size_bytes: number;
+  latitude: number | null;
+  longitude: number | null;
+  metadata: Record<string, unknown>;
+  captured_at: string | null;
+  created_at: string;
+};
+
+const toLegacyImage = (image: ImageRow) => ({
+  _id: image.id,
+  userId: image.user_id,
+  imageId: image.storage_path,
+  albumId: image.album_id,
+  size: image.size_bytes,
+  location: {
+    latitude: image.latitude,
+    longitude: image.longitude,
+  },
+  metadata: Object.entries(image.metadata ?? {}).map(([name, value]) => ({
+    name,
+    type: typeof value,
+  })),
+  timestamp: image.captured_at ?? image.created_at,
+  originalName: image.original_name,
+  mimeType: image.mime_type,
+});
 
 export async function GET(request: NextRequest) {
   try {
-    await connectDB();
-
-    const firebaseUser = await verifyFirebaseUser(request);
-
-    if (!firebaseUser) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { searchParams } = new URL(request.url);
-    const rawAlbumId = searchParams.get("albumId") ?? "";
+    const user = await getAuthenticatedUser(request);
+    const supabase = createSupabaseServerClient(request);
+    const rawAlbumId = request.nextUrl.searchParams.get("albumId") ?? "";
     const albumId = rawAlbumId.replace(/^"|"$/g, "").trim();
     const isAllAlbums = albumId.toLowerCase() === "all";
 
-    const { uid } = firebaseUser;
+    if (!isAllAlbums && albumId) {
+      const { data: album, error: albumError } = await supabase
+        .from("albums")
+        .select("id")
+        .eq("id", albumId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (albumError) throw albumError;
+      if (!album) return Response.json({ error: "Album not found for user" }, { status: 404 });
+    }
 
-    let photos;
-    if (isAllAlbums) {
-      photos = await Image.find({ userId: uid }).exec();
-    } else {
-      let foundAlbum;
+    let selectedAlbumId = albumId;
+    if (!isAllAlbums && !selectedAlbumId) {
+      const { data: recentAlbum, error: recentError } = await supabase
+        .from("albums")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("name", "Recent")
+        .maybeSingle();
+      if (recentError) throw recentError;
 
-      if (albumId) {
-        foundAlbum = await Album.findOne({ _id: albumId, userId: uid }).exec();
-        if (!foundAlbum) {
-          return new Response(
-            JSON.stringify({ error: "Album not found for user" }),
-            {
-              status: 404,
-              headers: { "Content-Type": "application/json" },
-            },
-          );
-        }
+      if (recentAlbum) {
+        selectedAlbumId = recentAlbum.id;
       } else {
-        foundAlbum = await Album.findOne({
-          name: "Recent",
-          userId: uid,
-        }).exec();
-        if (!foundAlbum) {
-          foundAlbum = await Album.create({ name: "Recent", userId: uid });
-        }
+        const { data: createdAlbum, error: createError } = await supabase
+          .from("albums")
+          .insert({ user_id: user.id, name: "Recent" })
+          .select("id")
+          .single();
+        if (createError) throw createError;
+        selectedAlbumId = createdAlbum.id;
       }
-
-      photos = await Image.find({
-        userId: uid,
-        albumId: foundAlbum._id,
-      }).exec();
     }
 
-    if (!photos) {
-      return new Response(
-        JSON.stringify({ error: "No photos found for user" }),
-        {
-          status: 404,
-          headers: { "Content-Type": "application/json" },
-        },
-      );
-    }
+    let query = supabase
+      .from("images")
+      .select("id, user_id, album_id, storage_path, original_name, mime_type, size_bytes, latitude, longitude, metadata, captured_at, created_at")
+      .eq("user_id", user.id)
+      .order("captured_at", { ascending: false, nullsFirst: false });
+    if (!isAllAlbums) query = query.eq("album_id", selectedAlbumId);
 
-    return new Response(JSON.stringify(photos), {
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
+    const { data: images, error } = await query;
+    if (error) throw error;
+    return Response.json((images as ImageRow[]).map(toLegacyImage), { status: 200 });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return Response.json({ error: error.message }, { status: error.status });
+    }
     console.error("Error fetching photos:", error);
-    return new Response("Internal Server Error", { status: 500 });
+    return Response.json({ error: "Failed to fetch photos" }, { status: 500 });
   }
 }
 
 export async function DELETE(request: NextRequest) {
   const { photoId } = await request.json();
-
-  if (!photoId) {
-    return Response.json({ error: "Missing photoId parameter" }, { status: 400 });
-  }
+  if (!photoId) return Response.json({ error: "Missing photoId parameter" }, { status: 400 });
 
   try {
-    await connectDB();
+    const user = await getAuthenticatedUser(request);
+    const supabase = createSupabaseServerClient(request);
+    const { data: image, error: imageError } = await supabase
+      .from("images")
+      .select("id, storage_path, size_bytes")
+      .eq("user_id", user.id)
+      .eq("storage_path", String(photoId))
+      .maybeSingle();
+    if (imageError) throw imageError;
+    if (!image) return Response.json({ error: "Photo not found for user" }, { status: 404 });
 
-    const firebaseUser = await verifyFirebaseUser(request);
-    if (!firebaseUser) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const { error: deleteError } = await supabase
+      .from("images")
+      .delete()
+      .eq("id", image.id)
+      .eq("user_id", user.id);
+    if (deleteError) throw deleteError;
 
-    const {uid} = firebaseUser;
+    const { error: releaseError } = await supabase.rpc("release_storage", {
+      released_bytes: image.size_bytes,
+    });
+    if (releaseError) throw releaseError;
 
-    // find the photo in db
-    const image = await Image.findOne({ imageId: photoId, userId : uid  }).exec();
-
-    if (!image) {
-      return Response.json({ error: "Photo not found for user" }, { status: 404 });
-    }
-
-    const result = await Image.deleteOne({ imageId: photoId, userId : uid }).exec();
-
-    if (result.deletedCount === 0) {
-      return Response.json({ error: "Failed to delete photo" }, { status: 500 });
-    }
-
-    // reduce storage usage for the user in the database (optional, depending on your implementation)
-    await Storage.findOneAndUpdate(
-      { userId : uid },
-      { $inc: { usedStorage: -image.size } },
-    ).exec();
-
-    // delete from minio
-    await minioClient.removeObject(
-      "user-newminiouser-8aa9e5bc-ef69-4c49-b2bc-f3538cd5bb44-bucket",
-      photoId,
-    );
+    const { error: storageError } = await supabase.storage
+      .from("photos")
+      .remove([image.storage_path]);
+    if (storageError) throw storageError;
 
     return Response.json({ message: "Photo deleted successfully" }, { status: 200 });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return Response.json({ error: error.message }, { status: error.status });
+    }
     console.error("Error deleting photo:", error);
-    return new Response("Internal Server Error", { status: 500 });
+    return Response.json({ error: "Failed to delete photo" }, { status: 500 });
   }
 }
