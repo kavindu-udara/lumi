@@ -13,7 +13,20 @@ type Metadata = {
   [key: string]: unknown;
 };
 
-const MAX_FILE_SIZE = 50 * 1024 * 1024;
+const MAX_FILE_SIZE = 500 * 1024 * 1024;
+const ALLOWED_MEDIA_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "image/heic",
+  "image/heif",
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
+  "video/3gpp",
+  "video/x-matroska",
+]);
 const RESERVED_FORM_FIELDS = new Set(["image", "file", "imageFile", "metadata", "meta", "data"]);
 
 function isUploadedFile(value: FormDataEntryValue | null): value is File {
@@ -66,10 +79,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "Media file is required", success: false }, { status: 400 });
     }
     if (imageFile.size <= 0 || imageFile.size > MAX_FILE_SIZE) {
-      return NextResponse.json({ message: "Media file exceeds the 50 MB limit", success: false }, { status: 400 });
+      return NextResponse.json({ message: "Media file exceeds the 500 MB limit", success: false }, { status: 400 });
     }
-    if (!imageFile.type.startsWith("image/") && !imageFile.type.startsWith("video/")) {
-      return NextResponse.json({ message: "Only images and videos are allowed", success: false }, { status: 400 });
+    if (!ALLOWED_MEDIA_TYPES.has(imageFile.type.toLowerCase())) {
+      return NextResponse.json({ message: "Unsupported image or video format", success: false }, { status: 400 });
     }
 
     let metadata: Metadata;
@@ -118,7 +131,7 @@ export async function POST(request: NextRequest) {
     const normalizedMetadata: Metadata = {
       ...metadata,
       name: typeof metadata.name === "string" ? metadata.name : imageFile.name,
-      type: imageFile.type.startsWith("video/") ? "video" : "image",
+      type: imageFile.type.toLowerCase().startsWith("video/") ? "video" : "image",
     };
     const { data: createdImage, error: imageError } = await supabase
       .from("images")
@@ -146,6 +159,7 @@ export async function POST(request: NextRequest) {
         albumId: createdImage.album_id,
         filename: createdImage.original_name,
         mimeType: createdImage.mime_type,
+        mediaType: createdImage.mime_type.startsWith("video/") ? "video" : "image",
         size: createdImage.size_bytes,
         storagePath: createdImage.storage_path,
         metadata: createdImage.metadata,

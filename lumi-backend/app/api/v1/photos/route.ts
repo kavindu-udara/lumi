@@ -34,6 +34,7 @@ const toLegacyImage = (image: ImageRow) => ({
   timestamp: image.captured_at ?? image.created_at,
   originalName: image.original_name,
   mimeType: image.mime_type,
+  mediaType: image.mime_type.startsWith("video/") ? "video" : "image",
 });
 
 export async function GET(request: NextRequest) {
