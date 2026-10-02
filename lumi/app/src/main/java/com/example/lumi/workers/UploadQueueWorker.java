@@ -17,9 +17,8 @@ public class UploadQueueWorker {
     private static final Object LOCK = new Object();
     private static boolean isRunning = false;
 
-    public static void enqueue(Context context, String firebaseUserId, String authToken) {
+    public static void enqueue(Context context, String authToken) {
         if (context == null
-                || firebaseUserId == null || firebaseUserId.trim().isEmpty()
                 || authToken == null || authToken.trim().isEmpty()) {
             return;
         }
@@ -32,10 +31,10 @@ public class UploadQueueWorker {
         }
 
         Context appContext = context.getApplicationContext();
-        new Thread(() -> processQueue(appContext, firebaseUserId, authToken), "lumi-upload-queue").start();
+        new Thread(() -> processQueue(appContext, authToken), "lumi-upload-queue").start();
     }
 
-    private static void processQueue(Context context, String firebaseUserId, String authToken) {
+    private static void processQueue(Context context, String authToken) {
         UploadQueueStore store = new UploadQueueStore(context);
         try {
             while (true) {
@@ -54,7 +53,6 @@ public class UploadQueueWorker {
                 JsonObject metadata = new JsonObject();
                 metadata.addProperty("capturedAt", String.valueOf(item.getCreatedAt()));
                 metadata.addProperty("date", item.getDate());
-                metadata.addProperty("firebaseUserId", item.getFirebaseUserId());
                 metadata.addProperty("storagePath", item.getFilePath());
                 if (item.getLatitude() != null) {
                     metadata.addProperty("latitude", item.getLatitude());
@@ -87,5 +85,4 @@ public class UploadQueueWorker {
         }
     }
 }
-
 

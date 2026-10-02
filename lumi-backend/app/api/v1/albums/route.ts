@@ -1,22 +1,24 @@
-import { verifyFirebaseUser } from "@/lib/auth/firebase-user-auth";
-import connectDB from "@/lib/db";
-import Album from "@/models/album.model";
+import { getAuthenticatedUser, AuthError } from "@/lib/auth/supabase-user-auth";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { NextRequest } from "next/server";
 
 export async function GET(request: NextRequest) {
     try {
 
-        await connectDB();
-        
-        const firebaseUser = await verifyFirebaseUser(request);
+        const user = await getAuthenticatedUser(request);
+        const supabase = createSupabaseServerClient(request);
+        const { data: albums, error } = await supabase
+            .from("albums")
+            .select("id, user_id, name, description, cover_photo_path, created_at, updated_at")
+            .eq("user_id", user.id)
+            .order("created_at", { ascending: true });
 
-        if (!firebaseUser) {
-            return Response.json({ error: "Unauthorized" }, { status: 401 });
-        }
-
-        const albums = await Album.find({ userId: firebaseUser.uid }).exec();
+        if (error) throw error;
         return Response.json({ albums }, { status: 200 });
     } catch (error) {
+        if (error instanceof AuthError) {
+            return Response.json({ error: error.message }, { status: error.status });
+        }
         console.error("Error fetching albums:", error instanceof Error ? error.message : String(error));
         return Response.json({ error: "Failed to fetch albums" }, { status: 500 });
     }
@@ -25,13 +27,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
     try {
        
-        await connectDB(); 
-
-        const firebaseUser = await verifyFirebaseUser(request);
-
-        if(!firebaseUser){
-            return Response.json({ error: "Unauthorized" }, { status: 401 });
-        }
+        const user = await getAuthenticatedUser(request);
+        const supabase = createSupabaseServerClient(request);
 
         // create an new album for the user with the given uid
         const {name} = await request.json();
@@ -39,25 +36,25 @@ export async function POST(request: NextRequest) {
             return Response.json({ error: "Missing album name" }, { status: 400 });
         }
 
-        const { uid } = firebaseUser;
+        const { data: newAlbum, error } = await supabase
+            .from("albums")
+            .insert({ user_id: user.id, name: String(name).trim() })
+            .select("id, user_id, name, description, cover_photo_path, created_at, updated_at")
+            .single();
 
-        // check is the album already exists for the user
-        const existingAlbum = await Album.findOne({ userId: uid, name }).exec();
-        if(existingAlbum){
-            return Response.json({ error: "Album with the same name already exists" }, { status: 400 });
+        if (error) {
+            if (error.code === "23505") {
+                return Response.json({ error: "Album with the same name already exists" }, { status: 400 });
+            }
+            throw error;
         }
-
-        const newAlbum = new Album({
-            userId: uid,
-            name,
-            photos: [],
-        });
-
-        await newAlbum.save();
 
         return Response.json({ album: newAlbum }, { status: 201 });
 
     } catch (error) {
+        if (error instanceof AuthError) {
+            return Response.json({ error: error.message }, { status: error.status });
+        }
         console.error("Error parsing parameters:", error instanceof Error ? error.message : String(error));
         return Response.json({ error: "Invalid parameters" }, { status: 400 });
     }

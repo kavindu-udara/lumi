@@ -14,6 +14,7 @@ public class SessionManager {
 
     private static final String PREF_NAME = "lumi_secure_prefs";
     private static final String KEY_TOKEN = "auth_token";
+    private static final String KEY_REFRESH_TOKEN = "refresh_token";
     private static final String KEY_USER = "user_data";
 
     private SharedPreferences sharedPreferences;
@@ -39,6 +40,14 @@ public class SessionManager {
 
     public  void saveToken(String token) {
         sharedPreferences.edit().putString(KEY_TOKEN, token).apply();
+    }
+
+    public void saveRefreshToken(String token) {
+        sharedPreferences.edit().putString(KEY_REFRESH_TOKEN, token).apply();
+    }
+
+    public String getRefreshToken() {
+        return sharedPreferences.getString(KEY_REFRESH_TOKEN, null);
     }
 
     public  void saveUser(JsonObject user) {

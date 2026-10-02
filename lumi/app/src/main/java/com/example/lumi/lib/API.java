@@ -1,16 +1,21 @@
 package com.example.lumi.lib;
 
+import android.content.Context;
+import android.content.Intent;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
 
+import com.example.lumi.BuildConfig;
+import com.example.lumi.activities.SignIn;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonPrimitive;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 import okhttp3.MediaType;
 import okhttp3.MultipartBody;
@@ -21,15 +26,67 @@ import okhttp3.Response;
 
 public class API {
 
-    final static String BASE_URL = "http://172.20.10.2:3000/api/v1";
+    private static final String BASE_URL = normalizedBaseUrl();
+    private static Context appContext;
     OkHttpClient client;
 
     public API() {
         this.client = new OkHttpClient();
     }
 
+    public static void initialize(Context context) {
+        appContext = context.getApplicationContext();
+    }
+
     public String getBaseUrl() {
         return BASE_URL;
+    }
+
+    public String getPreviewUrl(String userId, String albumId, String fileName) {
+        if (userId == null || userId.isEmpty() || albumId == null || albumId.isEmpty()
+                || fileName == null || fileName.isEmpty()) {
+            throw new IllegalArgumentException("Preview URL requires userId, albumId, and fileName");
+        }
+        return getPreviewUrl(userId + "/" + albumId + "/" + fileName);
+    }
+
+    public String getPreviewUrl(String storagePath) {
+        if (storagePath == null || storagePath.trim().isEmpty()) {
+            throw new IllegalArgumentException("Preview URL requires a storage path");
+        }
+
+        StringBuilder encodedPath = new StringBuilder();
+        for (String segment : storagePath.split("/")) {
+            if (segment.isEmpty()) {
+                continue;
+            }
+            if (encodedPath.length() > 0) {
+                encodedPath.append('/');
+            }
+            encodedPath.append(encodePathSegment(segment));
+        }
+
+        return BASE_URL + "/photos/preview/" + encodedPath;
+    }
+
+    private static String encodePathSegment(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
+    }
+
+    private static String normalizedBaseUrl() {
+        String configuredUrl = BuildConfig.API_BASE_URL == null
+                ? "" : BuildConfig.API_BASE_URL.trim();
+        while (configuredUrl.endsWith("/")) {
+            configuredUrl = configuredUrl.substring(0, configuredUrl.length() - 1);
+        }
+        if (configuredUrl.isEmpty()) {
+            throw new IllegalStateException(
+                    "API_BASE_URL is missing. Add it to .env and rebuild the app.");
+        }
+        if (!configuredUrl.endsWith("/api/v1")) {
+            configuredUrl += "/api/v1";
+        }
+        return configuredUrl;
     }
 
     public static JsonObject POST(String endpoint, JsonObject reqObj) throws IOException, IllegalStateException {
@@ -40,6 +97,9 @@ public class API {
                 .build();
 
         try (Response response = new OkHttpClient().newCall(request).execute()) {
+            if (handleUnauthorized(response)) {
+                return null;
+            }
             Gson gson = new Gson();
             return gson.fromJson(response.body().string(), JsonObject.class);
         }
@@ -50,11 +110,14 @@ public class API {
                 .url(BASE_URL + endpoint)
                 .post(okhttp3.RequestBody.create(reqObj.toString(), okhttp3.MediaType.parse("application/json")));
 
-        if (token != null) {
+        if (hasToken(token)) {
             requestBuilder.addHeader("Authorization", "Bearer " + token);
         }
 
         try (Response response = new OkHttpClient().newCall(requestBuilder.build()).execute()) {
+            if (handleUnauthorized(response)) {
+                return null;
+            }
             Gson gson = new Gson();
             String responseBody = response.body() != null ? response.body().string() : "";
             Log.i("API", "POST response code: " + response.code() + ", message: " + response.message() + ", body: " + responseBody);
@@ -67,11 +130,14 @@ public class API {
                 .url(BASE_URL + endpoint)
                 .put(okhttp3.RequestBody.create(reqObj.toString(), okhttp3.MediaType.parse("application/json")));
 
-        if (token != null) {
+        if (hasToken(token)) {
             requestBuilder.addHeader("Authorization", "Bearer " + token);
         }
 
         try (Response response = new OkHttpClient().newCall(requestBuilder.build()).execute()) {
+            if (handleUnauthorized(response)) {
+                return null;
+            }
             Gson gson = new Gson();
             String responseBody = response.body() != null ? response.body().string() : "";
             Log.i("API", "PUT response code: " + response.code() + ", message: " + response.message() + ", body: " + responseBody);
@@ -82,9 +148,10 @@ public class API {
     public static JsonElement GET(String endpoint, @Nullable String token) throws IOException, IllegalStateException {
 
         Request request;
-        Log.i("API", "GET request to: " + BASE_URL + endpoint + ", with token: " + token);
+        Log.i("API", "GET request to: " + BASE_URL + endpoint
+                + ", authenticated: " + hasToken(token));
 
-        if (token == null) {
+        if (!hasToken(token)) {
             request = new Request.Builder()
                     .url(BASE_URL + endpoint)
                     .get()
@@ -98,6 +165,9 @@ public class API {
         }
 
         try (Response response = new OkHttpClient().newCall(request).execute()) {
+            if (handleUnauthorized(response)) {
+                return null;
+            }
             Gson gson = new Gson();
             String responseBody = response.body() != null ? response.body().string() : "";
             Log.i("API", "GET response code: " + response.code() + ", message: " + response.message() + ", body: " + responseBody);
@@ -110,11 +180,14 @@ public class API {
                 .url(BASE_URL + endpoint)
                 .delete();
 
-        if (token != null) {
+        if (hasToken(token)) {
             requestBuilder.addHeader("Authorization", "Bearer " + token);
         }
 
         try (Response response = new OkHttpClient().newCall(requestBuilder.build()).execute()) {
+            if (handleUnauthorized(response)) {
+                return null;
+            }
             Gson gson = new Gson();
             String responseBody = response.body() != null ? response.body().string() : "";
             Log.i("API", "DELETE response code: " + response.code() + ", message: " + response.message() + ", body: " + responseBody);
@@ -128,11 +201,14 @@ public class API {
                 .url(BASE_URL + endpoint)
                 .method("DELETE", body);
 
-        if (token != null) {
+        if (hasToken(token)) {
             requestBuilder.addHeader("Authorization", "Bearer " + token);
         }
 
         try (Response response = new OkHttpClient().newCall(requestBuilder.build()).execute()) {
+            if (handleUnauthorized(response)) {
+                return null;
+            }
             Gson gson = new Gson();
 
             String responseBody = response.body() != null ? response.body().string() : "";
@@ -142,13 +218,7 @@ public class API {
     }
 
     public static boolean uploadImage(String endpoint, @Nullable String token, File imageFile, JsonObject metadata) throws IOException {
-        String contentType = "image/jpeg";
-        String fileName = imageFile.getName().toLowerCase();
-        if (fileName.endsWith(".mp4")) {
-            contentType = "video/mp4";
-        } else if (fileName.endsWith(".mov")) {
-            contentType = "video/quicktime";
-        }
+        String contentType = mediaTypeForFile(imageFile);
 
         MultipartBody.Builder multipartBuilder = new MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
@@ -159,26 +229,57 @@ public class API {
                 );
 
         if (metadata != null) {
-            for (String key : metadata.keySet()) {
-                if (metadata.get(key) instanceof JsonPrimitive) {
-                    multipartBuilder.addFormDataPart(key, metadata.get(key).getAsString());
-                }
-            }
+            multipartBuilder.addFormDataPart("metadata", metadata.toString());
         }
 
         Request.Builder requestBuilder = new Request.Builder()
                 .url(BASE_URL + endpoint)
                 .post(multipartBuilder.build());
 
-        if (token != null) {
+        if (hasToken(token)) {
             requestBuilder.addHeader("Authorization", "Bearer " + token);
         }
 
         try (Response response = new OkHttpClient().newCall(requestBuilder.build()).execute()) {
+            if (handleUnauthorized(response)) {
+                return false;
+            }
             Log.i("API", "Upload response code: " + response.code() + ", message: " + response.message());
             return response.isSuccessful();
         }
+
+    }
+
+    private static boolean hasToken(@Nullable String token) {
+        return token != null && !token.trim().isEmpty();
+    }
+
+    private static boolean handleUnauthorized(Response response) {
+        if (response.code() != 401 || appContext == null) {
+            return false;
+        }
+
+        new SessionManager(appContext).clearSession();
+        Intent intent = new Intent(appContext, SignIn.class)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                        | Intent.FLAG_ACTIVITY_CLEAR_TASK
+                        | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        appContext.startActivity(intent);
+        return true;
+    }
+
+    private static String mediaTypeForFile(File file) {
+        String fileName = file.getName().toLowerCase(java.util.Locale.ROOT);
+        if (fileName.endsWith(".mp4")) return "video/mp4";
+        if (fileName.endsWith(".mov")) return "video/quicktime";
+        if (fileName.endsWith(".webm")) return "video/webm";
+        if (fileName.endsWith(".3gp") || fileName.endsWith(".3gpp")) return "video/3gpp";
+        if (fileName.endsWith(".mkv")) return "video/x-matroska";
+        if (fileName.endsWith(".png")) return "image/png";
+        if (fileName.endsWith(".webp")) return "image/webp";
+        if (fileName.endsWith(".gif")) return "image/gif";
+        if (fileName.endsWith(".heic")) return "image/heic";
+        if (fileName.endsWith(".heif")) return "image/heif";
+        return "image/jpeg";
     }
 }
-
-

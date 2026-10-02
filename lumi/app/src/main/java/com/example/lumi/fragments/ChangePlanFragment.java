@@ -191,7 +191,7 @@ public class ChangePlanFragment extends Fragment {
         backButton.setOnClickListener(v -> parent.getSupportFragmentManager().popBackStack());
         changeSubscriptionButton.setOnClickListener(v -> onChangeSubscriptionClicked());
 
-//        init firebase auth
+        sessionManager = new SessionManager(requireContext());
         mAuth = FirebaseAuth.getInstance();
 
         PaymentConfiguration.init(requireContext(), STRIPE_PUBLISHABLE_KEY);
@@ -206,78 +206,57 @@ public class ChangePlanFragment extends Fragment {
         plansRecycler.setVisibility(View.GONE);
         plansErrorText.setVisibility(View.GONE);
 
-        if (mAuth.getCurrentUser() == null) {
+        String authToken = sessionManager.getToken();
+        if (authToken == null || authToken.trim().isEmpty()) {
             loadingPlans.setVisibility(View.GONE);
             plansRecycler.setVisibility(View.GONE);
             plansErrorText.setVisibility(View.VISIBLE);
             return;
         }
 
-        mAuth.getCurrentUser().getIdToken(false).addOnCompleteListener(task -> {
-            if (!task.isSuccessful() || task.getResult() == null || task.getResult().getToken() == null) {
-                if (!isAdded()) {
-                    return;
-                }
+        new Thread(() -> {
+            try {
+                JsonElement plansResponse = API.GET("/plans", authToken);
+                List<Plan> plans = parsePlans(plansResponse);
+                String userId = sessionManager.getUser() != null
+                        && sessionManager.getUser().has("id")
+                        ? sessionManager.getUser().get("id").getAsString() : null;
+                String currentPlanFromApi = fetchCurrentSubscriptionPlanId(authToken, userId);
+
+                if (!isAdded()) return;
+                parent.runOnUiThread(() -> {
+                    loadingPlans.setVisibility(View.GONE);
+                    plansRecycler.setVisibility(View.VISIBLE);
+                    adapter.submitPlans(plans);
+                    loadedPlans.clear();
+                    loadedPlans.addAll(plans);
+                    Plan initialPlan = pickInitialPlan(plans, currentPlanFromApi);
+                    if (initialPlan != null) {
+                        activePlanId = initialPlan.getId();
+                        selectedPlanId = initialPlan.getId();
+                        adapter.setActivePlanId(activePlanId);
+                        adapter.setSelectedPlanId(selectedPlanId);
+                        selectedPlanText.setText("Selected plan: " + initialPlan.getName());
+                    } else {
+                        activePlanId = null;
+                        selectedPlanId = null;
+                        selectedPlanText.setText("Selected plan: none");
+                    }
+                    updateChangeButtonState();
+                });
+            } catch (Exception e) {
+                if (!isAdded()) return;
                 parent.runOnUiThread(() -> {
                     loadingPlans.setVisibility(View.GONE);
                     plansRecycler.setVisibility(View.GONE);
                     plansErrorText.setVisibility(View.VISIBLE);
+                    activePlanId = null;
+                    selectedPlanId = null;
                     selectedPlanText.setText("Selected plan: none");
                     updateChangeButtonState();
                 });
-                return;
             }
-
-            String authToken = task.getResult().getToken();
-            String firebaseUid = mAuth.getCurrentUser().getUid();
-
-            new Thread(() -> {
-                try {
-                    JsonElement plansResponse = API.GET("/plans", authToken);
-                    List<Plan> plans = parsePlans(plansResponse);
-                    String currentPlanFromApi = fetchCurrentSubscriptionPlanId(authToken, firebaseUid);
-
-                    if (!isAdded()) {
-                        return;
-                    }
-
-                    parent.runOnUiThread(() -> {
-                        loadingPlans.setVisibility(View.GONE);
-                        plansRecycler.setVisibility(View.VISIBLE);
-                        adapter.submitPlans(plans);
-                        loadedPlans.clear();
-                        loadedPlans.addAll(plans);
-
-                        Plan initialPlan = pickInitialPlan(plans, currentPlanFromApi);
-                        if (initialPlan != null) {
-                            activePlanId = initialPlan.getId();
-                            selectedPlanId = initialPlan.getId();
-                            adapter.setActivePlanId(activePlanId);
-                            adapter.setSelectedPlanId(selectedPlanId);
-                            selectedPlanText.setText("Selected plan: " + initialPlan.getName());
-                        } else {
-                            activePlanId = null;
-                            selectedPlanId = null;
-                            selectedPlanText.setText("Selected plan: none");
-                        }
-                        updateChangeButtonState();
-                    });
-                } catch (Exception e) {
-                    if (!isAdded()) {
-                        return;
-                    }
-                    parent.runOnUiThread(() -> {
-                        loadingPlans.setVisibility(View.GONE);
-                        plansRecycler.setVisibility(View.GONE);
-                        plansErrorText.setVisibility(View.VISIBLE);
-                        activePlanId = null;
-                        selectedPlanId = null;
-                        selectedPlanText.setText("Selected plan: none");
-                        updateChangeButtonState();
-                    });
-                }
-            }).start();
-        });
+        }).start();
     }
 
     private void onChangeSubscriptionClicked() {
@@ -443,10 +422,6 @@ public class ChangePlanFragment extends Fragment {
     }
 
     private String fetchCurrentSubscriptionPlanId(String token, String firebaseUid) {
-        if (firebaseUid == null || firebaseUid.trim().isEmpty()) {
-            return null;
-        }
-
         try {
             JsonElement response = API.GET("/subscription", token);
             if (response == null || !response.isJsonObject()) {
@@ -459,16 +434,23 @@ public class ChangePlanFragment extends Fragment {
             }
 
             JsonObject subscription = root.getAsJsonObject("subscription");
-            if (!subscription.has("planId") || !subscription.get("planId").isJsonObject()) {
+            if (!subscription.has("planId") || subscription.get("planId").isJsonNull()) {
                 return null;
             }
 
-            JsonObject planObj = subscription.getAsJsonObject("planId");
-            if (!planObj.has("_id") || planObj.get("_id").isJsonNull()) {
-                return null;
+            JsonElement planId = subscription.get("planId");
+            if (planId.isJsonPrimitive()) {
+                return planId.getAsString();
             }
 
-            return planObj.get("_id").getAsString();
+            JsonObject planObj = planId.getAsJsonObject();
+            if (planObj.has("_id") && !planObj.get("_id").isJsonNull()) {
+                return planObj.get("_id").getAsString();
+            }
+            if (planObj.has("id") && !planObj.get("id").isJsonNull()) {
+                return planObj.get("id").getAsString();
+            }
+            return null;
         } catch (Exception ignored) {
             return null;
         }
@@ -573,4 +555,3 @@ public class ChangePlanFragment extends Fragment {
         return Math.round(value * requireContext().getResources().getDisplayMetrics().density);
     }
 }
-

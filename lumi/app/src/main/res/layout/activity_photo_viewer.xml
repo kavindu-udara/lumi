@@ -47,6 +47,17 @@
         android:padding="16dp">
 
         <ImageButton
+            android:id="@+id/playButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginHorizontal="8dp"
+            android:background="@android:color/transparent"
+            android:contentDescription="Play video"
+            android:src="@android:drawable/ic_media_play"
+            android:visibility="gone"
+            app:tint="@android:color/white" />
+
+        <ImageButton
             android:id="@+id/shareButton"
             android:layout_width="48dp"
             android:layout_height="48dp"
@@ -78,4 +89,3 @@
     </LinearLayout>
 
 </FrameLayout>
-

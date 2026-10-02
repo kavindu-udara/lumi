@@ -70,4 +70,21 @@
         android:src="@android:drawable/ic_menu_camera"
         android:visibility="gone" />
 
+    <ProgressBar
+        android:id="@+id/album_photos_loading"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:indeterminate="true"
+        android:visibility="gone"
+        android:contentDescription="@string/loading" />
+
+    <ProgressBar
+        android:id="@+id/albums_loading"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:visibility="gone"
+        android:contentDescription="@string/loading" />
+
 </FrameLayout>

@@ -7,13 +7,21 @@ import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
+import android.widget.FrameLayout;
+import android.widget.VideoView;
+import android.net.Uri;
+import java.util.HashMap;
+import java.util.Map;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.model.GlideUrl;
+import com.bumptech.glide.load.model.LazyHeaders;
 import com.bumptech.glide.request.RequestOptions;
 import com.example.lumi.lib.API;
+import com.example.lumi.lib.SessionManager;
 
 import java.io.File;
 import java.io.Serializable;
@@ -60,6 +68,7 @@ public class HomeGalleryAdapter extends RecyclerView.Adapter<HomeGalleryAdapter.
     @NonNull
     @Override
     public PlaceholderViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+        FrameLayout container = new FrameLayout(context);
         ImageView imageView = new ImageView(context);
         RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -67,23 +76,42 @@ public class HomeGalleryAdapter extends RecyclerView.Adapter<HomeGalleryAdapter.
         );
         int margin = dp(2);
         params.setMargins(margin, margin, margin, margin);
-        imageView.setLayoutParams(params);
+        container.setLayoutParams(params);
+        imageView.setLayoutParams(new FrameLayout.LayoutParams(-1, -1));
         imageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
         imageView.setBackgroundColor(Color.parseColor("#BDBDBD"));
 
-        return new PlaceholderViewHolder(imageView);
+        VideoView videoView = new VideoView(context);
+        videoView.setLayoutParams(new FrameLayout.LayoutParams(-1, -1));
+        videoView.setVisibility(View.GONE);
+        container.addView(imageView);
+        container.addView(videoView);
+        return new PlaceholderViewHolder(container, imageView, videoView);
     }
 
     @Override
     public void onBindViewHolder(@NonNull PlaceholderViewHolder holder, int position) {
         GalleryItem item = items.get(position);
         holder.imageView.setImageDrawable(new ColorDrawable(Color.parseColor("#BDBDBD")));
+        holder.videoView.stopPlayback();
+        holder.videoView.setVisibility(View.GONE);
+        holder.imageView.setVisibility(View.VISIBLE);
 
         if (item == null) {
             return;
         }
 
+        holder.imageView.setOnClickListener(v -> {
+            if (onItemClickListener != null && holder.getBindingAdapterPosition() != RecyclerView.NO_POSITION) {
+                onItemClickListener.onItemClick(holder.getBindingAdapterPosition(), item);
+            }
+        });
+
         if (item.isLocal() && item.getLocalPath() != null && !item.getLocalPath().trim().isEmpty()) {
+            if (item.isVideo()) {
+                holder.imageView.setImageResource(android.R.drawable.ic_media_play);
+                return;
+            }
             Glide.with(context)
                     .load(new File(item.getLocalPath()))
                     .apply(requestOptions)
@@ -92,18 +120,20 @@ public class HomeGalleryAdapter extends RecyclerView.Adapter<HomeGalleryAdapter.
         }
 
         if (item.getImageId() != null && !item.getImageId().trim().isEmpty()) {
-            String url = new API().getBaseUrl() + "/photos/preview/" + item.getImageId();
+            String url = item.getPreviewUrl(new API(), new SessionManager(context));
+            if (item.isVideo()) {
+                holder.imageView.setImageResource(android.R.drawable.ic_media_play);
+                return;
+            }
+            GlideUrl glideUrl = new GlideUrl(url, new LazyHeaders.Builder()
+                    .addHeader("Authorization", "Bearer " + new SessionManager(context).getToken())
+                    .build());
             Glide.with(context)
-                    .load(url)
+                    .load(glideUrl)
                     .apply(requestOptions)
                     .into(holder.imageView);
         }
 
-        holder.imageView.setOnClickListener(v -> {
-            if (onItemClickListener != null && holder.getBindingAdapterPosition() != RecyclerView.NO_POSITION) {
-                onItemClickListener.onItemClick(holder.getBindingAdapterPosition(), item);
-            }
-        });
     }
 
     @Override
@@ -121,16 +151,19 @@ public class HomeGalleryAdapter extends RecyclerView.Adapter<HomeGalleryAdapter.
 
     public static class PlaceholderViewHolder extends RecyclerView.ViewHolder {
         final ImageView imageView;
+        final VideoView videoView;
 
-        public PlaceholderViewHolder(@NonNull View itemView) {
+        public PlaceholderViewHolder(@NonNull FrameLayout itemView, ImageView imageView, VideoView videoView) {
             super(itemView);
-            imageView = (ImageView) itemView;
+            this.imageView = imageView;
+            this.videoView = videoView;
         }
     }
 
     public static class GalleryItem implements Serializable {
         private final String photoId;
         private final String imageId;
+        private final String albumId;
         private final String localPath;
         private final long createdAt;
         private final String queueId;
@@ -140,6 +173,7 @@ public class HomeGalleryAdapter extends RecyclerView.Adapter<HomeGalleryAdapter.
         private GalleryItem(
                 String photoId,
                 String imageId,
+                String albumId,
                 String localPath,
                 long createdAt,
                 String queueId,
@@ -148,6 +182,7 @@ public class HomeGalleryAdapter extends RecyclerView.Adapter<HomeGalleryAdapter.
         ) {
             this.photoId = photoId;
             this.imageId = imageId;
+            this.albumId = albumId;
             this.localPath = localPath;
             this.createdAt = createdAt;
             this.queueId = queueId;
@@ -156,11 +191,15 @@ public class HomeGalleryAdapter extends RecyclerView.Adapter<HomeGalleryAdapter.
         }
 
         public static GalleryItem remote(String photoId, String imageId, long createdAt, Double latitude, Double longitude) {
-            return new GalleryItem(photoId, imageId, null, createdAt, null, latitude, longitude);
+            return remote(photoId, imageId, null, createdAt, latitude, longitude);
+        }
+
+        public static GalleryItem remote(String photoId, String imageId, String albumId, long createdAt, Double latitude, Double longitude) {
+            return new GalleryItem(photoId, imageId, albumId, null, createdAt, null, latitude, longitude);
         }
 
         public static GalleryItem local(String queueId, String localPath, long createdAt, Double latitude, Double longitude) {
-            return new GalleryItem(null, null, localPath, createdAt, queueId, latitude, longitude);
+            return new GalleryItem(null, null, null, localPath, createdAt, queueId, latitude, longitude);
         }
 
         public String getPhotoId() {
@@ -169,6 +208,26 @@ public class HomeGalleryAdapter extends RecyclerView.Adapter<HomeGalleryAdapter.
 
         public String getImageId() {
             return imageId;
+        }
+
+        public String getAlbumId() {
+            return albumId;
+        }
+
+        public boolean isVideo() {
+            String value = imageId != null ? imageId.toLowerCase() : localPath;
+            return value != null && (value.endsWith(".mp4") || value.endsWith(".mov")
+                    || value.endsWith(".webm") || value.endsWith(".3gp"));
+        }
+
+        public String getPreviewUrl(API api, SessionManager sessionManager) {
+            if (imageId != null && imageId.contains("/")) {
+                return api.getPreviewUrl(imageId);
+            }
+
+            String userId = sessionManager.getUser() != null && sessionManager.getUser().has("id")
+                    ? sessionManager.getUser().get("id").getAsString() : "";
+            return api.getPreviewUrl(userId, albumId, imageId);
         }
 
         public String getLocalPath() {
@@ -196,4 +255,3 @@ public class HomeGalleryAdapter extends RecyclerView.Adapter<HomeGalleryAdapter.
         }
     }
 }
-

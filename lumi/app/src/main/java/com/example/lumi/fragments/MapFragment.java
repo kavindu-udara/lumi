@@ -20,12 +20,15 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.model.GlideUrl;
+import com.bumptech.glide.load.model.LazyHeaders;
 import com.bumptech.glide.request.target.CustomTarget;
 import com.bumptech.glide.request.transition.Transition;
 import com.example.lumi.R;
 import com.example.lumi.activities.PhotoViewerActivity;
 import com.example.lumi.adapters.HomeGalleryAdapter;
 import com.example.lumi.lib.API;
+import com.example.lumi.lib.SessionManager;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -102,62 +105,41 @@ public class MapFragment extends Fragment {
     public void onResume() {
         super.onResume();
         if (mapView != null) {
-            mapView.onResume();
+            loadPhotosAndPlaceMarkers();
         }
-    }
-
-    @Override
-    public void onPause() {
-        if (mapView != null) {
-            mapView.onPause();
-        }
-        super.onPause();
     }
 
     private void loadPhotosAndPlaceMarkers() {
         loadingIndicator.setVisibility(View.VISIBLE);
-
-        FirebaseUser currentUser = mAuth.getCurrentUser();
-        if (currentUser == null) {
+        SessionManager sessionManager = new SessionManager(requireContext());
+        String token = sessionManager.getToken();
+        if (token == null || token.trim().isEmpty()) {
             loadingIndicator.setVisibility(View.GONE);
             return;
         }
 
-        String firebaseUserId = currentUser.getUid();
-        currentUser.getIdToken(false).addOnCompleteListener(task -> {
-            if (!task.isSuccessful() || task.getResult() == null) {
-                if (isAdded()) {
+        new Thread(() -> {
+            try {
+                JsonElement response = API.GET("/photos?albumId=all", token);
+                List<PhotoLocation> locations = parsePhotoLocations(response);
+                photoLocations.clear();
+                photoLocations.addAll(locations);
+
+                if (!isAdded()) {
+                    return;
+                }
+
+                parent.runOnUiThread(() -> {
                     loadingIndicator.setVisibility(View.GONE);
+                    placeMarkersOnMap();
+                });
+            } catch (Exception e) {
+                Log.e("MapFragment", "Failed to load map photos", e);
+                if (isAdded()) {
+                    parent.runOnUiThread(() -> loadingIndicator.setVisibility(View.GONE));
                 }
-                return;
             }
-
-            String token = task.getResult().getToken();
-            String endpoint = "/" + firebaseUserId + "/photos?albumId=all";
-
-            new Thread(() -> {
-                try {
-                    JsonElement response = API.GET(endpoint, token);
-                    List<PhotoLocation> locations = parsePhotoLocations(response);
-                    photoLocations.clear();
-                    photoLocations.addAll(locations);
-
-                    if (!isAdded()) {
-                        return;
-                    }
-
-                    parent.runOnUiThread(() -> {
-                        loadingIndicator.setVisibility(View.GONE);
-                        placeMarkersOnMap();
-                    });
-                } catch (Exception e) {
-                    Log.e("MapFragment", "Failed to load photos", e);
-                    if (isAdded()) {
-                        parent.runOnUiThread(() -> loadingIndicator.setVisibility(View.GONE));
-                    }
-                }
-            }).start();
-        });
+        }).start();
     }
 
     private List<PhotoLocation> parsePhotoLocations(JsonElement response) {
@@ -262,7 +244,13 @@ public class MapFragment extends Fragment {
             return;
         }
 
-        String previewUrl = new API().getBaseUrl() + "/photos/preview/" + imageId;
+        SessionManager sessionManager = new SessionManager(requireContext());
+        GlideUrl previewUrl = new GlideUrl(
+            new API().getPreviewUrl(imageId),
+            new LazyHeaders.Builder()
+                .addHeader("Authorization", "Bearer " + sessionManager.getToken())
+                .build()
+        );
 
         Glide.with(requireContext())
                 .asBitmap()

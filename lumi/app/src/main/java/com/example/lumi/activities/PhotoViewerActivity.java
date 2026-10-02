@@ -8,6 +8,9 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.widget.ImageButton;
 import android.widget.TextView;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.VideoView;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
@@ -19,6 +22,8 @@ import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.viewpager2.widget.ViewPager2;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.model.GlideUrl;
+import com.bumptech.glide.load.model.LazyHeaders;
 import com.example.lumi.R;
 import com.example.lumi.adapters.HomeGalleryAdapter;
 import com.example.lumi.adapters.PhotoViewerPagerAdapter;
@@ -26,8 +31,6 @@ import com.example.lumi.lib.API;
 import com.example.lumi.lib.SessionManager;
 import com.example.lumi.lib.UploadQueueStore;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
-import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseUser;
 import com.google.gson.JsonObject;
 
 import java.io.File;
@@ -53,7 +56,7 @@ public class PhotoViewerActivity extends AppCompatActivity {
     private int currentIndex;
     private UploadQueueStore uploadQueueStore;
 
-    private FirebaseAuth mAuth;
+    private SessionManager sessionManager;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -67,9 +70,10 @@ public class PhotoViewerActivity extends AppCompatActivity {
         ImageButton shareButton = findViewById(R.id.shareButton);
         ImageButton deleteButton = findViewById(R.id.deleteButton);
         ImageButton detailsButton = findViewById(R.id.detailsButton);
+        ImageButton playButton = findViewById(R.id.playButton);
 
         uploadQueueStore = new UploadQueueStore(this);
-        mAuth = FirebaseAuth.getInstance();
+        sessionManager = new SessionManager(this);
 
         items = readItemsFromIntent(getIntent());
         currentIndex = getIntent().getIntExtra(EXTRA_START_INDEX, 0);
@@ -87,13 +91,43 @@ public class PhotoViewerActivity extends AppCompatActivity {
             public void onPageSelected(int position) {
                 currentIndex = position;
                 updatePositionText(position);
+                updatePlayButton(playButton);
             }
         });
 
         backButton.setOnClickListener(v -> finish());
+        playButton.setOnClickListener(v -> {
+            VideoView videoView = findVideoView(viewPager.getChildAt(0));
+            if (videoView != null) {
+                videoView.start();
+                playButton.setVisibility(View.GONE);
+            }
+        });
         shareButton.setOnClickListener(v -> shareCurrentImage());
         deleteButton.setOnClickListener(v -> showDeleteBottomSheet());
         detailsButton.setOnClickListener(v -> showCurrentImageDetails());
+        updatePlayButton(playButton);
+    }
+
+    private void updatePlayButton(ImageButton playButton) {
+        playButton.setVisibility(getCurrentItem() != null && getCurrentItem().isVideo()
+                ? View.VISIBLE : View.GONE);
+    }
+
+    private VideoView findVideoView(View view) {
+        if (view instanceof VideoView) {
+            return (VideoView) view;
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                VideoView videoView = findVideoView(group.getChildAt(i));
+                if (videoView != null) {
+                    return videoView;
+                }
+            }
+        }
+        return null;
     }
 
     @Override
@@ -151,10 +185,13 @@ public class PhotoViewerActivity extends AppCompatActivity {
                 if (item.isLocal() && !TextUtils.isEmpty(item.getLocalPath())) {
                     sourceFile = new File(item.getLocalPath());
                 } else {
-                    String url = new API().getBaseUrl() + "/photos/preview/" + item.getImageId();
+                    String url = item.getPreviewUrl(new API(), sessionManager);
+                    GlideUrl glideUrl = new GlideUrl(url, new LazyHeaders.Builder()
+                            .addHeader("Authorization", "Bearer " + sessionManager.getToken())
+                            .build());
                     sourceFile = Glide.with(this)
                             .asFile()
-                            .load(url)
+                            .load(glideUrl)
                             .submit()
                             .get();
                 }
@@ -302,29 +339,20 @@ public class PhotoViewerActivity extends AppCompatActivity {
             return;
         }
 
-        FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
-        String userId = currentUser == null ? null : currentUser.getUid();
         String photoId = item.getImageId();
 
-        if (currentUser == null || userId == null || userId.trim().isEmpty() || photoId == null || photoId.trim().isEmpty()) {
+        String token = sessionManager.getToken();
+        if (token == null || token.trim().isEmpty() || photoId == null || photoId.trim().isEmpty()) {
             android.widget.Toast.makeText(this, "Missing delete info", android.widget.Toast.LENGTH_SHORT).show();
             return;
         }
 
-        currentUser.getIdToken(false).addOnCompleteListener(tokenTask -> {
-            if (!tokenTask.isSuccessful() || tokenTask.getResult() == null || tokenTask.getResult().getToken() == null) {
-                android.widget.Toast.makeText(this, "Failed to authenticate request", android.widget.Toast.LENGTH_SHORT).show();
-                return;
-            }
-
-            String token = tokenTask.getResult().getToken();
-            Executors.newSingleThreadExecutor().execute(() -> {
+        Executors.newSingleThreadExecutor().execute(() -> {
                 try {
                     JsonObject reqObj = new JsonObject();
-                    reqObj.addProperty("userId", userId);
                     reqObj.addProperty("photoId", photoId);
 
-                    Log.i("PhotoViewerActivity", "Sending delete request for photoId: " + photoId + ", userId: " + userId);
+                    Log.i("PhotoViewerActivity", "Sending delete request for photoId: " + photoId);
                     API.DELETE("/photos", token, reqObj);
 
                     runOnUiThread(() -> {
@@ -336,7 +364,6 @@ public class PhotoViewerActivity extends AppCompatActivity {
                     runOnUiThread(() -> android.widget.Toast.makeText(this, "Failed to delete photo", android.widget.Toast.LENGTH_SHORT).show());
                 }
             });
-        });
     }
 
     private void showCurrentImageDetails() {
@@ -370,4 +397,3 @@ public class PhotoViewerActivity extends AppCompatActivity {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
 }
-

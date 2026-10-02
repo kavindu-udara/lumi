@@ -1,187 +1,100 @@
 import { NextRequest, NextResponse } from "next/server";
-import bcrypt from "bcrypt";
-import mongoose from "mongoose";
-import connectDB from "@/lib/db";
-import Admin from "@/models/admin.model";
-import Plan from "@/models/plans.model";
-import Album from "@/models/album.model";
-import Image from "@/models/image.model";
-import Subscription from "@/models/subcription.model";
-import Storage from "@/models/storage.model";
 import { getAdminFromRequest } from "@/lib/admin-guard";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-export const runtime = "nodejs";
-
-const resourceMap = {
-  admins: Admin,
-  plans: Plan,
-  albums: Album,
-  images: Image,
-  subscriptions: Subscription,
-  storage: Storage,
+const tableByResource = {
+  plans: "plans",
+  albums: "albums",
+  images: "images",
+  subscriptions: "subscriptions",
+  storage: "user_storage",
 } as const;
 
-type ResourceKey = keyof typeof resourceMap;
+type Resource = keyof typeof tableByResource;
+type Row = Record<string, unknown>;
+const isResource = (value: string): value is Resource => value in tableByResource;
 
-const getModelByResource = (resource: string) => {
-  if (!(resource in resourceMap)) {
-    return null;
+const toLegacyRow = (resource: Resource, row: Row): Row => {
+  const result: Row = { ...row, _id: row.id };
+  if (resource === "plans") result.storageLimit = row.storage_limit_bytes;
+  if (resource === "albums") {
+    result.userId = row.user_id;
+    result.coverPhotoUrl = row.cover_photo_path;
   }
-  return resourceMap[resource as ResourceKey];
+  if (resource === "images") {
+    result.userId = row.user_id;
+    result.imageId = row.storage_path;
+    result.albumId = row.album_id;
+    result.size = row.size_bytes;
+    result.timestamp = row.captured_at;
+  }
+  if (resource === "subscriptions") {
+    result.userId = row.user_id;
+    result.planId = row.plan_id;
+    result.stripeMerchantId = row.stripe_merchant_id;
+    result.paymentIntentId = row.payment_intent_id;
+    result.startDate = row.start_date;
+    result.endDate = row.end_date;
+  }
+  if (resource === "storage") {
+    result.userId = row.user_id;
+    result.planId = row.plan_id;
+    result.usedStorage = row.used_bytes;
+  }
+  return result;
 };
 
-const isAdminResource = (resource: string) => resource === "admins";
-
-const sanitizeItem = (resource: string, item: Record<string, unknown>) => {
-  if (!isAdminResource(resource)) {
-    return item;
+const toDbPayload = (resource: Resource, body: Row): Row => {
+  const payload = { ...body };
+  delete payload._id;
+  delete payload.id;
+  const aliases: Record<string, string> = resource === "plans"
+    ? { storageLimit: "storage_limit_bytes" }
+    : resource === "albums"
+      ? { userId: "user_id", coverPhotoUrl: "cover_photo_path" }
+      : resource === "images"
+        ? { userId: "user_id", imageId: "storage_path", albumId: "album_id", size: "size_bytes", timestamp: "captured_at" }
+        : resource === "subscriptions"
+          ? { userId: "user_id", planId: "plan_id", stripeMerchantId: "stripe_merchant_id", paymentIntentId: "payment_intent_id", startDate: "start_date", endDate: "end_date" }
+          : { userId: "user_id", planId: "plan_id", usedStorage: "used_bytes" };
+  for (const [legacy, database] of Object.entries(aliases)) {
+    if (payload[legacy] !== undefined) payload[database] = payload[legacy];
+    delete payload[legacy];
   }
-
-  const safeItem = { ...item };
-  delete safeItem.password;
-  return safeItem;
+  return payload;
 };
 
-const getSanitizedUpdatePayload = async (
-  resource: string,
-  payload: Record<string, unknown>
-) => {
-  const updated = { ...payload };
+const authorize = async (request: NextRequest) => getAdminFromRequest(request);
 
-  if (isAdminResource(resource)) {
-    if (typeof updated.password === "string" && updated.password.trim().length > 0) {
-      updated.password = await bcrypt.hash(updated.password, 10);
-    } else {
-      delete updated.password;
-    }
-
-    if (typeof updated.username === "string") {
-      updated.username = updated.username.trim();
-    }
-  }
-
-  return updated;
-};
-
-const assertValidObjectId = (id: string) => mongoose.Types.ObjectId.isValid(id);
-
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ resource: string; id: string }> }
-) {
-  const admin = getAdminFromRequest(request);
-  if (!admin) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
+export async function GET(request: NextRequest, { params }: { params: Promise<{ resource: string; id: string }> }) {
+  if (!(await authorize(request))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { resource, id } = await params;
-  const Model = getModelByResource(resource);
-
-  if (!Model) {
-    return NextResponse.json({ error: "Invalid resource" }, { status: 400 });
-  }
-
-  if (!assertValidObjectId(id)) {
-    return NextResponse.json({ error: "Invalid document id" }, { status: 400 });
-  }
-
-  try {
-    await connectDB();
-    const item = await Model.findById(id).lean();
-
-    if (!item) {
-      return NextResponse.json({ error: "Item not found" }, { status: 404 });
-    }
-
-    return NextResponse.json(
-      { item: sanitizeItem(resource, item as Record<string, unknown>) },
-      { status: 200 }
-    );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+  if (!isResource(resource)) return NextResponse.json({ error: "Invalid resource" }, { status: 400 });
+  const supabase = createSupabaseServerClient(request);
+  const { data, error } = await supabase.from(tableByResource[resource]).select().eq("id", id).maybeSingle();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!data) return NextResponse.json({ error: "Item not found" }, { status: 404 });
+  return NextResponse.json({ item: toLegacyRow(resource, data) });
 }
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ resource: string; id: string }> }
-) {
-  const admin = getAdminFromRequest(request);
-  if (!admin) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ resource: string; id: string }> }) {
+  if (!(await authorize(request))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { resource, id } = await params;
-  const Model = getModelByResource(resource);
-
-  if (!Model) {
-    return NextResponse.json({ error: "Invalid resource" }, { status: 400 });
-  }
-
-  if (!assertValidObjectId(id)) {
-    return NextResponse.json({ error: "Invalid document id" }, { status: 400 });
-  }
-
-  try {
-    await connectDB();
-    const body = (await request.json()) as Record<string, unknown>;
-    const payload = await getSanitizedUpdatePayload(resource, body);
-
-    const updated = await Model.findByIdAndUpdate(id, payload, {
-      new: true,
-      runValidators: true,
-    }).lean();
-
-    if (!updated) {
-      return NextResponse.json({ error: "Item not found" }, { status: 404 });
-    }
-
-    return NextResponse.json(
-      { item: sanitizeItem(resource, updated as Record<string, unknown>) },
-      { status: 200 }
-    );
-  } catch (error) {
-    if (error instanceof mongoose.Error.ValidationError) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
-    }
-
-    const message = error instanceof Error ? error.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+  if (!isResource(resource)) return NextResponse.json({ error: "Invalid resource" }, { status: 400 });
+  const supabase = createSupabaseServerClient(request);
+  const { data, error } = await supabase.from(tableByResource[resource]).update(toDbPayload(resource, await request.json())).eq("id", id).select().maybeSingle();
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  if (!data) return NextResponse.json({ error: "Item not found" }, { status: 404 });
+  return NextResponse.json({ item: toLegacyRow(resource, data) });
 }
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ resource: string; id: string }> }
-) {
-  const admin = getAdminFromRequest(request);
-  if (!admin) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ resource: string; id: string }> }) {
+  if (!(await authorize(request))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { resource, id } = await params;
-  const Model = getModelByResource(resource);
-
-  if (!Model) {
-    return NextResponse.json({ error: "Invalid resource" }, { status: 400 });
-  }
-
-  if (!assertValidObjectId(id)) {
-    return NextResponse.json({ error: "Invalid document id" }, { status: 400 });
-  }
-
-  try {
-    await connectDB();
-    const deleted = await Model.findByIdAndDelete(id).lean();
-
-    if (!deleted) {
-      return NextResponse.json({ error: "Item not found" }, { status: 404 });
-    }
-
-    return NextResponse.json({ success: true }, { status: 200 });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+  if (!isResource(resource)) return NextResponse.json({ error: "Invalid resource" }, { status: 400 });
+  const supabase = createSupabaseServerClient(request);
+  const { data, error } = await supabase.from(tableByResource[resource]).delete().eq("id", id).select("id").maybeSingle();
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  if (!data) return NextResponse.json({ error: "Item not found" }, { status: 404 });
+  return NextResponse.json({ success: true });
 }

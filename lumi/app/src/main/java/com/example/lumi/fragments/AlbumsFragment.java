@@ -24,18 +24,18 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
+import android.widget.ProgressBar;
 
 import com.example.lumi.R;
 import com.example.lumi.activities.PhotoViewerActivity;
 import com.example.lumi.adapters.AlbumAdapter;
 import com.example.lumi.adapters.HomeGalleryAdapter;
 import com.example.lumi.lib.API;
+import com.example.lumi.lib.SessionManager;
 import com.example.lumi.lib.Toast;
 import com.example.lumi.models.Album;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.textfield.TextInputEditText;
-import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseUser;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -58,7 +58,7 @@ public class AlbumsFragment extends Fragment {
     private static final int PHOTO_GRID_SPAN_COUNT = 5;
 
     AppCompatActivity parent;
-    private FirebaseAuth mAuth;
+    private SessionManager sessionManager;
     private AlbumAdapter albumAdapter;
     private HomeGalleryAdapter photoAdapter;
     private RecyclerView albumsRecyclerView;
@@ -66,6 +66,8 @@ public class AlbumsFragment extends Fragment {
     private FloatingActionButton fabCaptureAlbumPhoto;
     private View albumPhotosHeader;
     private TextView selectedAlbumTitle;
+    private ProgressBar albumPhotosLoading;
+    private ProgressBar albumsLoading;
     private boolean isShowingAlbumPhotos;
     private String selectedAlbumId;
 
@@ -94,7 +96,7 @@ public class AlbumsFragment extends Fragment {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        mAuth = FirebaseAuth.getInstance();
+        sessionManager = new SessionManager(requireContext());
         registerLaunchers();
     }
 
@@ -110,6 +112,8 @@ public class AlbumsFragment extends Fragment {
 
         albumPhotosHeader = view.findViewById(R.id.album_photos_header);
         selectedAlbumTitle = view.findViewById(R.id.selected_album_title);
+        albumPhotosLoading = view.findViewById(R.id.album_photos_loading);
+        albumsLoading = view.findViewById(R.id.albums_loading);
         TextView backToAlbums = view.findViewById(R.id.back_to_albums);
         backToAlbums.setOnClickListener(v -> showAlbumList());
 
@@ -168,6 +172,7 @@ public class AlbumsFragment extends Fragment {
             albumPhotosHeader.setVisibility(View.VISIBLE);
         }
         isShowingAlbumPhotos = true;
+        setAlbumPhotosLoading(true);
 
         loadPhotosForAlbum(album.getId());
     }
@@ -186,6 +191,26 @@ public class AlbumsFragment extends Fragment {
         }
         selectedAlbumId = null;
         isShowingAlbumPhotos = false;
+        setAlbumPhotosLoading(false);
+    }
+
+    private void setAlbumPhotosLoading(boolean loading) {
+        if (albumPhotosLoading != null) {
+            albumPhotosLoading.setVisibility(loading ? View.VISIBLE : View.GONE);
+            albumPhotosLoading.setClickable(loading);
+        }
+        if (albumsRecyclerView != null) {
+            albumsRecyclerView.setAlpha(loading ? 0.45f : 1f);
+        }
+    }
+
+    private void setAlbumsLoading(boolean loading) {
+        if (albumsLoading != null) {
+            albumsLoading.setVisibility(loading ? View.VISIBLE : View.GONE);
+        }
+        if (albumsRecyclerView != null && !isShowingAlbumPhotos) {
+            albumsRecyclerView.setAlpha(loading ? 0.45f : 1f);
+        }
     }
 
     private void registerLaunchers() {
@@ -331,20 +356,14 @@ public class AlbumsFragment extends Fragment {
     }
 
     private void uploadCapturedMedia(File mediaFile, String albumId, String successMessage, String failedMessage) {
-        FirebaseUser currentUser = mAuth.getCurrentUser();
-        if (currentUser == null) {
+        String token = sessionManager.getToken();
+        if (token == null) {
+            setAlbumPhotosLoading(false);
             Toast.error(parent, "User not logged in");
             return;
         }
 
-        currentUser.getIdToken(false).addOnCompleteListener(task -> {
-            if (!task.isSuccessful() || task.getResult() == null) {
-                Toast.error(parent, "Failed to get authentication token");
-                return;
-            }
-
-            String token = task.getResult().getToken();
-            new Thread(() -> {
+        new Thread(() -> {
                 try {
                     JsonObject metadata = new JsonObject();
                     long now = System.currentTimeMillis();
@@ -379,7 +398,6 @@ public class AlbumsFragment extends Fragment {
                     }
                 }
             }).start();
-        });
     }
 
     private String buildUploadEndpoint( String albumId) {
@@ -427,19 +445,13 @@ public class AlbumsFragment extends Fragment {
     }
 
     private void createAlbum(String albumName) {
-        FirebaseUser currentUser = mAuth.getCurrentUser();
-        if (currentUser == null) {
+        String token = sessionManager.getToken();
+        if (token == null) {
             Toast.error(parent, "User not logged in");
             return;
         }
 
-        // Get Firebase token for authenticated request
-        currentUser.getIdToken(false).addOnCompleteListener(task -> {
-            if (task.isSuccessful()) {
-                String token = task.getResult().getToken();
-
-                // Execute API call in background thread
-                new Thread(() -> {
+        new Thread(() -> {
                     try {
                         JsonObject requestBody = new JsonObject();
                         requestBody.addProperty("name", albumName);
@@ -466,30 +478,17 @@ public class AlbumsFragment extends Fragment {
                         }
                     }
                 }).start();
-            } else {
-                if (parent != null) {
-                    Toast.error(parent, "Failed to get authentication token");
-                }
-            }
-        });
     }
 
     private void loadAlbums() {
-        FirebaseUser currentUser = mAuth.getCurrentUser();
-        if (currentUser == null) {
+        String token = sessionManager.getToken();
+        if (token == null) {
+            setAlbumsLoading(false);
             return;
         }
 
-        currentUser.getIdToken(false).addOnCompleteListener(task -> {
-            if (!task.isSuccessful() || task.getResult() == null) {
-                if (parent != null) {
-                    Toast.error(parent, getString(R.string.albums_load_failed));
-                }
-                return;
-            }
-
-            String token = task.getResult().getToken();
-            new Thread(() -> {
+        setAlbumsLoading(true);
+        new Thread(() -> {
                 try {
                     String endpoint = "/albums";
                     JsonElement response = API.GET(endpoint, token);
@@ -499,15 +498,18 @@ public class AlbumsFragment extends Fragment {
                         parent.runOnUiThread(() -> {
                             showAlbumList();
                             albumAdapter.submitAlbums(albums);
+                            setAlbumsLoading(false);
                         });
                     }
                 } catch (IOException e) {
                     if (parent != null) {
-                        parent.runOnUiThread(() -> Toast.error(parent, getString(R.string.albums_load_failed)));
+                        parent.runOnUiThread(() -> {
+                            setAlbumsLoading(false);
+                            Toast.error(parent, getString(R.string.albums_load_failed));
+                        });
                     }
                 }
             }).start();
-        });
     }
 
     private List<Album> parseAlbums(JsonElement response) {
@@ -528,9 +530,16 @@ public class AlbumsFragment extends Fragment {
             }
 
             JsonObject albumObject = albumElement.getAsJsonObject();
-            String id = albumObject.has("_id") && !albumObject.get("_id").isJsonNull()
-                    ? albumObject.get("_id").getAsString()
-                    : "";
+            String id = readStringField(albumObject, "_id");
+            if (id.isEmpty()) {
+                id = readStringField(albumObject, "id");
+            }
+            if (id.isEmpty()) {
+                id = readStringField(albumObject, "albumId");
+            }
+            if (id.isEmpty()) {
+                id = readStringField(albumObject, "album_id");
+            }
             String name = albumObject.has("name") && !albumObject.get("name").isJsonNull()
                     ? albumObject.get("name").getAsString()
                     : "Untitled";
@@ -540,38 +549,50 @@ public class AlbumsFragment extends Fragment {
         return albums;
     }
 
+    private String readStringField(JsonObject object, String fieldName) {
+        if (!object.has(fieldName) || object.get(fieldName).isJsonNull()) {
+            return "";
+        }
+        JsonElement value = object.get(fieldName);
+        if (value.isJsonPrimitive()) {
+            return value.getAsString().trim();
+        }
+        if (value.isJsonObject() && value.getAsJsonObject().has("$oid")) {
+            return value.getAsJsonObject().get("$oid").getAsString().trim();
+        }
+        return "";
+    }
+
     private void loadPhotosForAlbum(String albumId) {
-        FirebaseUser currentUser = mAuth.getCurrentUser();
-        if (currentUser == null) {
+        String token = sessionManager.getToken();
+        if (token == null) {
             Toast.error(parent, "User not logged in");
             return;
         }
 
-        String firebaseUserId = currentUser.getUid();
-        currentUser.getIdToken(false).addOnCompleteListener(task -> {
-            if (!task.isSuccessful() || task.getResult() == null) {
-                Toast.error(parent, "Failed to get authentication token");
-                return;
-            }
-            String token = task.getResult().getToken();
-            new Thread(() -> {
+        new Thread(() -> {
                 try {
                     String endpoint = "/photos?albumId=" + Uri.encode(albumId)
-                            + "&firebaseUserId=" + Uri.encode(firebaseUserId);
+                            ;
                     JsonElement response = API.GET(endpoint, token);
                     List<HomeGalleryAdapter.GalleryItem> photos = extractPhotoSources(response);
                     Collections.sort(photos, Comparator.comparingLong(HomeGalleryAdapter.GalleryItem::getCreatedAt).reversed());
 
                     if (parent != null) {
-                        parent.runOnUiThread(() -> photoAdapter.setPhotos(photos));
+                        parent.runOnUiThread(() -> {
+                            photoAdapter.setPhotos(photos);
+                            setAlbumPhotosLoading(false);
+                        });
                     }
                 } catch (Exception e) {
                     if (parent != null) {
-                        parent.runOnUiThread(() -> Toast.error(parent, "Failed to load album photos"));
+                        parent.runOnUiThread(() -> {
+                            setAlbumPhotosLoading(false);
+                            Toast.error(parent, "Failed to load album photos");
+                        });
                     }
                 }
             }).start();
-        });
     }
 
     private List<HomeGalleryAdapter.GalleryItem> extractPhotoSources(JsonElement response) {
@@ -615,7 +636,7 @@ public class AlbumsFragment extends Fragment {
                 }
             }
 
-            sources.add(HomeGalleryAdapter.GalleryItem.remote(photoId, imageId, createdAt, latitude, longitude));
+            sources.add(HomeGalleryAdapter.GalleryItem.remote(photoId, imageId, selectedAlbumId, createdAt, latitude, longitude));
         }
 
         return sources;

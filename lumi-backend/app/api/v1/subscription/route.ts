@@ -1,169 +1,81 @@
-import connectDB from "@/lib/db";
-import stripe from "@/lib/stripe";
-import Plan from "@/models/plans.model";
-import Subscription from "@/models/subcription.model";
-import Storage from "@/models/storage.model";
 import { NextRequest } from "next/server";
-import { verifyFirebaseUser } from "@/lib/auth/firebase-user-auth";
+import { AuthError, getAuthenticatedUser } from "@/lib/auth/supabase-user-auth";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function GET(request: NextRequest) {
   try {
-    await connectDB();
+    const user = await getAuthenticatedUser(request);
+    const supabase = createSupabaseServerClient(request);
+    const { data: subscription, error } = await supabase
+      .from("subscriptions")
+      .select("id, user_id, plan_id, stripe_subscription_id, stripe_customer_id, status, current_period_start, current_period_end, cancel_at_period_end, cancelled_at, ended_at, pending_plan_id, pending_change_effective_at, start_date, end_date, plans(*)")
+      .eq("user_id", user.id)
+      .order("start_date", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    const firebaseUser = await verifyFirebaseUser(request);
-
-    if (!firebaseUser) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { uid } = firebaseUser;
-
-    const subscription = await Subscription.findOne({ userId: uid })
-      .populate("planId", "-__v")
-      .lean();
-
-    if (!subscription) {
-      const freePlan = await Plan.findOne({ name: "Free" })
-        .select("-__v")
-        .lean();
-
-      if (!freePlan) {
-        return Response.json({ error: "Free plan not found" }, { status: 404 });
-      }
-
-      return Response.json(
-        {
-          subscription: {
-            userId: uid,
-            planId: freePlan,
-            startDate: null,
-            endDate: null,
-          },
+    if (error) throw error;
+    const { data: storage, error: storageError } = await supabase
+      .from("user_storage")
+      .select("user_id, plan_id, used_bytes, plans(*)")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (storageError) throw storageError;
+    if (subscription) {
+      const plan = Array.isArray(subscription.plans) ? subscription.plans[0] : subscription.plans;
+      const storageLimit = plan?.storage_limit_bytes ?? null;
+      return Response.json({
+        subscription,
+        storage,
+        usage: {
+          usedBytes: storage?.used_bytes ?? 0,
+          limitBytes: storageLimit,
+          remainingBytes: storageLimit === null ? null : Math.max(storageLimit - (storage?.used_bytes ?? 0), 0),
         },
-        { status: 200 },
-      );
+      }, { status: 200 });
     }
 
-    return Response.json({ subscription }, { status: 200 });
+    const { data: freePlan, error: planError } = await supabase
+      .from("plans")
+      .select("id, name, storage_limit_bytes, price")
+      .eq("name", "Free")
+      .single();
+    if (planError) throw planError;
+
+    const storageLimit = freePlan.storage_limit_bytes;
+    return Response.json({
+      subscription: {
+        user_id: user.id,
+        plan_id: freePlan.id,
+        plans: freePlan,
+        start_date: null,
+        end_date: null,
+      },
+      storage,
+      usage: {
+        usedBytes: storage?.used_bytes ?? 0,
+        limitBytes: storageLimit,
+        remainingBytes: Math.max(storageLimit - (storage?.used_bytes ?? 0), 0),
+      },
+    }, { status: 200 });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Internal server error";
+    if (error instanceof AuthError) {
+      return Response.json({ error: error.message }, { status: error.status });
+    }
+    const message = error instanceof Error ? error.message : "Internal server error";
     return Response.json({ error: message }, { status: 500 });
   }
 }
 
 export async function PUT(request: NextRequest) {
   try {
-    await connectDB();
-
-    const firebaseUser = await verifyFirebaseUser(request);
-
-    if (!firebaseUser) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { uid } = firebaseUser;
-
-    if (!stripe) {
-      return Response.json(
-        { error: "Stripe is not configured" },
-        { status: 500 },
-      );
-    }
-
-    const subscription = await Subscription.findOne({ userId: uid });
-
-    // get the update plan from request body
-    const { planId, stripeMerchantId, paymentIntentId } = await request.json();
-    const effectivePaymentIntentId = paymentIntentId || stripeMerchantId;
-
-    if (!planId) {
-      return Response.json(
-        { error: "Missing planName in request body" },
-        { status: 400 },
-      );
-    }
-
-    if (!effectivePaymentIntentId) {
-      return Response.json(
-        { error: "Missing paymentIntentId in request body" },
-        { status: 400 },
-      );
-    }
-
-    const newPlan = await Plan.findOne({ _id: planId });
-
-    if (!newPlan) {
-      return Response.json({ error: "Plan not found" }, { status: 404 });
-    }
-
-    // We currently receive a PaymentIntent id (pi_...) from the client.
-    const paymentIntent = await stripe.paymentIntents.retrieve(
-      effectivePaymentIntentId,
-    );
-
-    if (!paymentIntent || paymentIntent.status !== "succeeded") {
-      return Response.json(
-        { error: "Payment not successful for the new plan" },
-        { status: 402 },
-      );
-    }
-
-    if (paymentIntent.metadata?.firebaseUserId !== uid) {
-      return Response.json(
-        { error: "PaymentIntent does not belong to this user" },
-        { status: 403 },
-      );
-    }
-
-    if (String(paymentIntent.metadata?.planId || "") !== String(newPlan._id)) {
-      return Response.json(
-        { error: "PaymentIntent plan does not match selected plan" },
-        { status: 400 },
-      );
-    }
-
-    const startDate = new Date();
-    const endDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days from today
-
-    if (subscription) {
-      await Subscription.findOneAndUpdate(
-        { userId: uid },
-        {
-          planId: newPlan._id,
-          stripeMerchantId: subscription.stripeMerchantId || null,
-          paymentIntentId: effectivePaymentIntentId,
-          startDate,
-          endDate,
-        },
-        { new: true, runValidators: true },
-      );
-    } else {
-      await Subscription.create({
-        userId: uid,
-        planId: newPlan._id,
-        stripeMerchantId: null,
-        paymentIntentId: effectivePaymentIntentId,
-        startDate,
-        endDate,
-      });
-    }
-
-    // Update storage planId to match the new subscription plan
-    await Storage.findOneAndUpdate(
-      { userId: uid },
-      { planId: newPlan._id },
-      { new: true, upsert: true, runValidators: true },
-    );
-
-    return Response.json(
-      { message: "Subscription updated successfully" },
-      { status: 200 },
-    );
+    await getAuthenticatedUser(request);
+    return Response.json({ error: "Direct subscription activation is removed; use recurring checkout" }, { status: 410 });
   } catch (error) {
-    console.log("Error updating subscription:", error);
-    const message =
-      error instanceof Error ? error.message : "Internal server error";
+    if (error instanceof AuthError) {
+      return Response.json({ error: error.message }, { status: error.status });
+    }
+    const message = error instanceof Error ? error.message : "Internal server error";
     return Response.json({ error: message }, { status: 500 });
   }
 }
