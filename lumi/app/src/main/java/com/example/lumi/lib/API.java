@@ -99,7 +99,7 @@ public class API {
                 .url(BASE_URL + endpoint)
                 .post(okhttp3.RequestBody.create(reqObj.toString(), okhttp3.MediaType.parse("application/json")));
 
-        if (token != null) {
+        if (hasToken(token)) {
             requestBuilder.addHeader("Authorization", "Bearer " + token);
         }
 
@@ -116,7 +116,7 @@ public class API {
                 .url(BASE_URL + endpoint)
                 .put(okhttp3.RequestBody.create(reqObj.toString(), okhttp3.MediaType.parse("application/json")));
 
-        if (token != null) {
+        if (hasToken(token)) {
             requestBuilder.addHeader("Authorization", "Bearer " + token);
         }
 
@@ -132,9 +132,9 @@ public class API {
 
         Request request;
         Log.i("API", "GET request to: " + BASE_URL + endpoint
-                + ", authenticated: " + (token != null));
+                + ", authenticated: " + hasToken(token));
 
-        if (token == null) {
+        if (!hasToken(token)) {
             request = new Request.Builder()
                     .url(BASE_URL + endpoint)
                     .get()
@@ -160,7 +160,7 @@ public class API {
                 .url(BASE_URL + endpoint)
                 .delete();
 
-        if (token != null) {
+        if (hasToken(token)) {
             requestBuilder.addHeader("Authorization", "Bearer " + token);
         }
 
@@ -178,7 +178,7 @@ public class API {
                 .url(BASE_URL + endpoint)
                 .method("DELETE", body);
 
-        if (token != null) {
+        if (hasToken(token)) {
             requestBuilder.addHeader("Authorization", "Bearer " + token);
         }
 
@@ -210,7 +210,7 @@ public class API {
                 .url(BASE_URL + endpoint)
                 .post(multipartBuilder.build());
 
-        if (token != null) {
+        if (hasToken(token)) {
             requestBuilder.addHeader("Authorization", "Bearer " + token);
         }
 
@@ -218,6 +218,11 @@ public class API {
             Log.i("API", "Upload response code: " + response.code() + ", message: " + response.message());
             return response.isSuccessful();
         }
+
+    }
+
+    private static boolean hasToken(@Nullable String token) {
+        return token != null && !token.trim().isEmpty();
     }
 
     private static String mediaTypeForFile(File file) {
