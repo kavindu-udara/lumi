@@ -43,6 +43,7 @@
     <string name="upload_photo_failed">Failed to upload photo</string>
     <string name="record_video">Record video</string>
     <string name="upload_video_failed">Failed to upload video</string>
+    <string name="loading">Loading</string>
     <string name="photo_uploaded_successfully">Photo uploaded successfully</string>
     <string name="video_uploaded_successfully">Video uploaded successfully</string>
 </resources>
