@@ -67,6 +67,7 @@ public class AlbumsFragment extends Fragment {
     private View albumPhotosHeader;
     private TextView selectedAlbumTitle;
     private ProgressBar albumPhotosLoading;
+    private ProgressBar albumsLoading;
     private boolean isShowingAlbumPhotos;
     private String selectedAlbumId;
 
@@ -112,6 +113,7 @@ public class AlbumsFragment extends Fragment {
         albumPhotosHeader = view.findViewById(R.id.album_photos_header);
         selectedAlbumTitle = view.findViewById(R.id.selected_album_title);
         albumPhotosLoading = view.findViewById(R.id.album_photos_loading);
+        albumsLoading = view.findViewById(R.id.albums_loading);
         TextView backToAlbums = view.findViewById(R.id.back_to_albums);
         backToAlbums.setOnClickListener(v -> showAlbumList());
 
@@ -198,6 +200,15 @@ public class AlbumsFragment extends Fragment {
             albumPhotosLoading.setClickable(loading);
         }
         if (albumsRecyclerView != null) {
+            albumsRecyclerView.setAlpha(loading ? 0.45f : 1f);
+        }
+    }
+
+    private void setAlbumsLoading(boolean loading) {
+        if (albumsLoading != null) {
+            albumsLoading.setVisibility(loading ? View.VISIBLE : View.GONE);
+        }
+        if (albumsRecyclerView != null && !isShowingAlbumPhotos) {
             albumsRecyclerView.setAlpha(loading ? 0.45f : 1f);
         }
     }
@@ -472,9 +483,11 @@ public class AlbumsFragment extends Fragment {
     private void loadAlbums() {
         String token = sessionManager.getToken();
         if (token == null) {
+            setAlbumsLoading(false);
             return;
         }
 
+        setAlbumsLoading(true);
         new Thread(() -> {
                 try {
                     String endpoint = "/albums";
@@ -485,11 +498,15 @@ public class AlbumsFragment extends Fragment {
                         parent.runOnUiThread(() -> {
                             showAlbumList();
                             albumAdapter.submitAlbums(albums);
+                            setAlbumsLoading(false);
                         });
                     }
                 } catch (IOException e) {
                     if (parent != null) {
-                        parent.runOnUiThread(() -> Toast.error(parent, getString(R.string.albums_load_failed)));
+                        parent.runOnUiThread(() -> {
+                            setAlbumsLoading(false);
+                            Toast.error(parent, getString(R.string.albums_load_failed));
+                        });
                     }
                 }
             }).start();

@@ -8,6 +8,9 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.widget.ImageButton;
 import android.widget.TextView;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.VideoView;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
@@ -67,6 +70,7 @@ public class PhotoViewerActivity extends AppCompatActivity {
         ImageButton shareButton = findViewById(R.id.shareButton);
         ImageButton deleteButton = findViewById(R.id.deleteButton);
         ImageButton detailsButton = findViewById(R.id.detailsButton);
+        ImageButton playButton = findViewById(R.id.playButton);
 
         uploadQueueStore = new UploadQueueStore(this);
         sessionManager = new SessionManager(this);
@@ -87,13 +91,43 @@ public class PhotoViewerActivity extends AppCompatActivity {
             public void onPageSelected(int position) {
                 currentIndex = position;
                 updatePositionText(position);
+                updatePlayButton(playButton);
             }
         });
 
         backButton.setOnClickListener(v -> finish());
+        playButton.setOnClickListener(v -> {
+            VideoView videoView = findVideoView(viewPager.getChildAt(0));
+            if (videoView != null) {
+                videoView.start();
+                playButton.setVisibility(View.GONE);
+            }
+        });
         shareButton.setOnClickListener(v -> shareCurrentImage());
         deleteButton.setOnClickListener(v -> showDeleteBottomSheet());
         detailsButton.setOnClickListener(v -> showCurrentImageDetails());
+        updatePlayButton(playButton);
+    }
+
+    private void updatePlayButton(ImageButton playButton) {
+        playButton.setVisibility(getCurrentItem() != null && getCurrentItem().isVideo()
+                ? View.VISIBLE : View.GONE);
+    }
+
+    private VideoView findVideoView(View view) {
+        if (view instanceof VideoView) {
+            return (VideoView) view;
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                VideoView videoView = findVideoView(group.getChildAt(i));
+                if (videoView != null) {
+                    return videoView;
+                }
+            }
+        }
+        return null;
     }
 
     @Override
