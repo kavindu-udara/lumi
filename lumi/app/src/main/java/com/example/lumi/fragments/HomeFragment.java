@@ -143,8 +143,7 @@ public class HomeFragment extends Fragment {
     @Override
     public void onStart() {
         super.onStart();
-        FirebaseUser currentUser = mAuth.getCurrentUser();
-        if (currentUser != null) {
+        if (sessionManager != null && sessionManager.isLoggedIn()) {
             // User is logged in - do nothing
             // Refresh gallery when returning to the screen, in case uploads completed while away.
             renderMergedGallery();
