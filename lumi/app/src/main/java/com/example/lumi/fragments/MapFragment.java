@@ -105,62 +105,41 @@ public class MapFragment extends Fragment {
     public void onResume() {
         super.onResume();
         if (mapView != null) {
-            mapView.onResume();
+            loadPhotosAndPlaceMarkers();
         }
-    }
-
-    @Override
-    public void onPause() {
-        if (mapView != null) {
-            mapView.onPause();
-        }
-        super.onPause();
     }
 
     private void loadPhotosAndPlaceMarkers() {
         loadingIndicator.setVisibility(View.VISIBLE);
-
-        FirebaseUser currentUser = mAuth.getCurrentUser();
-        if (currentUser == null) {
+        SessionManager sessionManager = new SessionManager(requireContext());
+        String token = sessionManager.getToken();
+        if (token == null || token.trim().isEmpty()) {
             loadingIndicator.setVisibility(View.GONE);
             return;
         }
 
-        String firebaseUserId = currentUser.getUid();
-        currentUser.getIdToken(false).addOnCompleteListener(task -> {
-            if (!task.isSuccessful() || task.getResult() == null) {
-                if (isAdded()) {
+        new Thread(() -> {
+            try {
+                JsonElement response = API.GET("/photos?albumId=all", token);
+                List<PhotoLocation> locations = parsePhotoLocations(response);
+                photoLocations.clear();
+                photoLocations.addAll(locations);
+
+                if (!isAdded()) {
+                    return;
+                }
+
+                parent.runOnUiThread(() -> {
                     loadingIndicator.setVisibility(View.GONE);
+                    placeMarkersOnMap();
+                });
+            } catch (Exception e) {
+                Log.e("MapFragment", "Failed to load map photos", e);
+                if (isAdded()) {
+                    parent.runOnUiThread(() -> loadingIndicator.setVisibility(View.GONE));
                 }
-                return;
             }
-
-            String token = task.getResult().getToken();
-            String endpoint = "/" + firebaseUserId + "/photos?albumId=all";
-
-            new Thread(() -> {
-                try {
-                    JsonElement response = API.GET(endpoint, token);
-                    List<PhotoLocation> locations = parsePhotoLocations(response);
-                    photoLocations.clear();
-                    photoLocations.addAll(locations);
-
-                    if (!isAdded()) {
-                        return;
-                    }
-
-                    parent.runOnUiThread(() -> {
-                        loadingIndicator.setVisibility(View.GONE);
-                        placeMarkersOnMap();
-                    });
-                } catch (Exception e) {
-                    Log.e("MapFragment", "Failed to load photos", e);
-                    if (isAdded()) {
-                        parent.runOnUiThread(() -> loadingIndicator.setVisibility(View.GONE));
-                    }
-                }
-            }).start();
-        });
+        }).start();
     }
 
     private List<PhotoLocation> parsePhotoLocations(JsonElement response) {

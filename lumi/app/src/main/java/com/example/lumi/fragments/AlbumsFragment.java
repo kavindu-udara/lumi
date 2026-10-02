@@ -24,6 +24,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
+import android.widget.ProgressBar;
 
 import com.example.lumi.R;
 import com.example.lumi.activities.PhotoViewerActivity;
@@ -65,6 +66,7 @@ public class AlbumsFragment extends Fragment {
     private FloatingActionButton fabCaptureAlbumPhoto;
     private View albumPhotosHeader;
     private TextView selectedAlbumTitle;
+    private ProgressBar albumPhotosLoading;
     private boolean isShowingAlbumPhotos;
     private String selectedAlbumId;
 
@@ -109,6 +111,7 @@ public class AlbumsFragment extends Fragment {
 
         albumPhotosHeader = view.findViewById(R.id.album_photos_header);
         selectedAlbumTitle = view.findViewById(R.id.selected_album_title);
+        albumPhotosLoading = view.findViewById(R.id.album_photos_loading);
         TextView backToAlbums = view.findViewById(R.id.back_to_albums);
         backToAlbums.setOnClickListener(v -> showAlbumList());
 
@@ -167,6 +170,7 @@ public class AlbumsFragment extends Fragment {
             albumPhotosHeader.setVisibility(View.VISIBLE);
         }
         isShowingAlbumPhotos = true;
+        setAlbumPhotosLoading(true);
 
         loadPhotosForAlbum(album.getId());
     }
@@ -185,6 +189,17 @@ public class AlbumsFragment extends Fragment {
         }
         selectedAlbumId = null;
         isShowingAlbumPhotos = false;
+        setAlbumPhotosLoading(false);
+    }
+
+    private void setAlbumPhotosLoading(boolean loading) {
+        if (albumPhotosLoading != null) {
+            albumPhotosLoading.setVisibility(loading ? View.VISIBLE : View.GONE);
+            albumPhotosLoading.setClickable(loading);
+        }
+        if (albumsRecyclerView != null) {
+            albumsRecyclerView.setAlpha(loading ? 0.45f : 1f);
+        }
     }
 
     private void registerLaunchers() {
@@ -332,6 +347,7 @@ public class AlbumsFragment extends Fragment {
     private void uploadCapturedMedia(File mediaFile, String albumId, String successMessage, String failedMessage) {
         String token = sessionManager.getToken();
         if (token == null) {
+            setAlbumPhotosLoading(false);
             Toast.error(parent, "User not logged in");
             return;
         }
@@ -497,9 +513,16 @@ public class AlbumsFragment extends Fragment {
             }
 
             JsonObject albumObject = albumElement.getAsJsonObject();
-            String id = albumObject.has("_id") && !albumObject.get("_id").isJsonNull()
-                    ? albumObject.get("_id").getAsString()
-                    : "";
+            String id = readStringField(albumObject, "_id");
+            if (id.isEmpty()) {
+                id = readStringField(albumObject, "id");
+            }
+            if (id.isEmpty()) {
+                id = readStringField(albumObject, "albumId");
+            }
+            if (id.isEmpty()) {
+                id = readStringField(albumObject, "album_id");
+            }
             String name = albumObject.has("name") && !albumObject.get("name").isJsonNull()
                     ? albumObject.get("name").getAsString()
                     : "Untitled";
@@ -507,6 +530,20 @@ public class AlbumsFragment extends Fragment {
         }
 
         return albums;
+    }
+
+    private String readStringField(JsonObject object, String fieldName) {
+        if (!object.has(fieldName) || object.get(fieldName).isJsonNull()) {
+            return "";
+        }
+        JsonElement value = object.get(fieldName);
+        if (value.isJsonPrimitive()) {
+            return value.getAsString().trim();
+        }
+        if (value.isJsonObject() && value.getAsJsonObject().has("$oid")) {
+            return value.getAsJsonObject().get("$oid").getAsString().trim();
+        }
+        return "";
     }
 
     private void loadPhotosForAlbum(String albumId) {
@@ -525,11 +562,17 @@ public class AlbumsFragment extends Fragment {
                     Collections.sort(photos, Comparator.comparingLong(HomeGalleryAdapter.GalleryItem::getCreatedAt).reversed());
 
                     if (parent != null) {
-                        parent.runOnUiThread(() -> photoAdapter.setPhotos(photos));
+                        parent.runOnUiThread(() -> {
+                            photoAdapter.setPhotos(photos);
+                            setAlbumPhotosLoading(false);
+                        });
                     }
                 } catch (Exception e) {
                     if (parent != null) {
-                        parent.runOnUiThread(() -> Toast.error(parent, "Failed to load album photos"));
+                        parent.runOnUiThread(() -> {
+                            setAlbumPhotosLoading(false);
+                            Toast.error(parent, "Failed to load album photos");
+                        });
                     }
                 }
             }).start();

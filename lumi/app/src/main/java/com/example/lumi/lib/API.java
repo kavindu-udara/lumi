@@ -192,13 +192,7 @@ public class API {
     }
 
     public static boolean uploadImage(String endpoint, @Nullable String token, File imageFile, JsonObject metadata) throws IOException {
-        String contentType = "image/jpeg";
-        String fileName = imageFile.getName().toLowerCase();
-        if (fileName.endsWith(".mp4")) {
-            contentType = "video/mp4";
-        } else if (fileName.endsWith(".mov")) {
-            contentType = "video/quicktime";
-        }
+        String contentType = mediaTypeForFile(imageFile);
 
         MultipartBody.Builder multipartBuilder = new MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
@@ -224,5 +218,20 @@ public class API {
             Log.i("API", "Upload response code: " + response.code() + ", message: " + response.message());
             return response.isSuccessful();
         }
+    }
+
+    private static String mediaTypeForFile(File file) {
+        String fileName = file.getName().toLowerCase(java.util.Locale.ROOT);
+        if (fileName.endsWith(".mp4")) return "video/mp4";
+        if (fileName.endsWith(".mov")) return "video/quicktime";
+        if (fileName.endsWith(".webm")) return "video/webm";
+        if (fileName.endsWith(".3gp") || fileName.endsWith(".3gpp")) return "video/3gpp";
+        if (fileName.endsWith(".mkv")) return "video/x-matroska";
+        if (fileName.endsWith(".png")) return "image/png";
+        if (fileName.endsWith(".webp")) return "image/webp";
+        if (fileName.endsWith(".gif")) return "image/gif";
+        if (fileName.endsWith(".heic")) return "image/heic";
+        if (fileName.endsWith(".heif")) return "image/heif";
+        return "image/jpeg";
     }
 }
