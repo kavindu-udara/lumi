@@ -311,8 +311,8 @@ values (
   'photos',
   'photos',
   false,
-  52428800,
-  array['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/quicktime']
+  524288000,
+  array['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif', 'video/mp4', 'video/quicktime', 'video/webm', 'video/3gpp', 'video/x-matroska']
 )
 on conflict (id) do update set
   public = excluded.public,
