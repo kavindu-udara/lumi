@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
       await Promise.all([
         supabase
           .from("subscriptions")
-          .select("id, user_id, plan_id, stripe_merchant_id, payment_intent_id, start_date, end_date, plans(*)")
+          .select("id, user_id, plan_id, stripe_subscription_id, stripe_customer_id, status, current_period_start, current_period_end, cancel_at_period_end, cancelled_at, ended_at, pending_plan_id, pending_change_effective_at, start_date, end_date, plans(*)")
           .eq("user_id", user.id)
           .order("start_date", { ascending: false })
           .limit(1)
@@ -24,7 +24,21 @@ export async function GET(request: NextRequest) {
 
     if (subscriptionError) throw subscriptionError;
     if (storageError) throw storageError;
-    if (subscription) return Response.json({ subscription, storage }, { status: 200 });
+    if (subscription) {
+      const plan = Array.isArray(subscription.plans) ? subscription.plans[0] : subscription.plans;
+      const limitBytes = plan?.storage_limit_bytes ?? null;
+      const usedBytes = storage?.used_bytes ?? 0;
+      return Response.json({
+        subscription,
+        storage,
+        usage: {
+          usedBytes,
+          limitBytes,
+          remainingBytes: limitBytes === null ? null : Math.max(limitBytes - usedBytes, 0),
+          isFull: limitBytes !== null && usedBytes >= limitBytes,
+        },
+      }, { status: 200 });
+    }
 
     const { data: freePlan, error: planError } = await supabase
       .from("plans")
@@ -33,6 +47,7 @@ export async function GET(request: NextRequest) {
       .single();
     if (planError) throw planError;
 
+    const usedBytes = storage?.used_bytes ?? 0;
     return Response.json({
       subscription: {
         user_id: user.id,
@@ -42,6 +57,12 @@ export async function GET(request: NextRequest) {
         end_date: null,
       },
       storage,
+      usage: {
+        usedBytes,
+        limitBytes: freePlan.storage_limit_bytes,
+        remainingBytes: Math.max(freePlan.storage_limit_bytes - usedBytes, 0),
+        isFull: usedBytes >= freePlan.storage_limit_bytes,
+      },
     }, { status: 200 });
   } catch (error) {
     if (error instanceof AuthError) {

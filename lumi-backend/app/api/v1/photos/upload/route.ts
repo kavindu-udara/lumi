@@ -67,6 +67,7 @@ export async function POST(request: NextRequest) {
 
   let storagePath: string | null = null;
   let reservedBytes = 0;
+  let storageReserved = false;
   try {
     const user = await getAuthenticatedUser(request);
     const supabase = createSupabaseServerClient(request);
@@ -117,9 +118,11 @@ export async function POST(request: NextRequest) {
       selectedAlbumId = createdAlbum.id;
     }
 
-    reservedBytes = imageFile.size;
-    const { error: reserveError } = await supabase.rpc("reserve_storage", { required_bytes: reservedBytes });
+    const requestedBytes = imageFile.size;
+    const { error: reserveError } = await supabase.rpc("reserve_storage", { required_bytes: requestedBytes });
     if (reserveError) throw reserveError;
+    reservedBytes = requestedBytes;
+    storageReserved = true;
 
     const imageId = randomUUID();
     storagePath = `${user.id}/${selectedAlbumId}/${imageId}-${safeFileName(imageFile.name)}`;
@@ -172,8 +175,15 @@ export async function POST(request: NextRequest) {
 
     const supabase = createSupabaseServerClient(request);
     if (storagePath) await supabase.storage.from("photos").remove([storagePath]);
-    if (reservedBytes) await supabase.rpc("release_storage", { released_bytes: reservedBytes });
+    if (storageReserved && reservedBytes) await supabase.rpc("release_storage", { released_bytes: reservedBytes });
     console.error("Error uploading photo:", error);
+    if (error && typeof error === "object" && "code" in error && error.code === "53200") {
+      return NextResponse.json({
+        message: "Storage limit exceeded",
+        error: "STORAGE_LIMIT_EXCEEDED",
+        success: false,
+      }, { status: 413 });
+    }
     return NextResponse.json({ message: "Failed to upload photo", success: false }, { status: 500 });
   }
 }

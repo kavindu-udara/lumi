@@ -1,7 +1,6 @@
 import { NextRequest } from "next/server";
-import stripe from "@/lib/stripe";
 import { AuthError, getAuthenticatedUser } from "@/lib/auth/supabase-user-auth";
-import { createSupabaseAdminClient, createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,14 +8,32 @@ export async function GET(request: NextRequest) {
     const supabase = createSupabaseServerClient(request);
     const { data: subscription, error } = await supabase
       .from("subscriptions")
-      .select("id, user_id, plan_id, stripe_merchant_id, payment_intent_id, start_date, end_date, plans(*)")
+      .select("id, user_id, plan_id, stripe_subscription_id, stripe_customer_id, status, current_period_start, current_period_end, cancel_at_period_end, cancelled_at, ended_at, pending_plan_id, pending_change_effective_at, start_date, end_date, plans(*)")
       .eq("user_id", user.id)
       .order("start_date", { ascending: false })
       .limit(1)
       .maybeSingle();
 
     if (error) throw error;
-    if (subscription) return Response.json({ subscription }, { status: 200 });
+    const { data: storage, error: storageError } = await supabase
+      .from("user_storage")
+      .select("user_id, plan_id, used_bytes, plans(*)")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (storageError) throw storageError;
+    if (subscription) {
+      const plan = Array.isArray(subscription.plans) ? subscription.plans[0] : subscription.plans;
+      const storageLimit = plan?.storage_limit_bytes ?? null;
+      return Response.json({
+        subscription,
+        storage,
+        usage: {
+          usedBytes: storage?.used_bytes ?? 0,
+          limitBytes: storageLimit,
+          remainingBytes: storageLimit === null ? null : Math.max(storageLimit - (storage?.used_bytes ?? 0), 0),
+        },
+      }, { status: 200 });
+    }
 
     const { data: freePlan, error: planError } = await supabase
       .from("plans")
@@ -25,6 +42,7 @@ export async function GET(request: NextRequest) {
       .single();
     if (planError) throw planError;
 
+    const storageLimit = freePlan.storage_limit_bytes;
     return Response.json({
       subscription: {
         user_id: user.id,
@@ -32,6 +50,12 @@ export async function GET(request: NextRequest) {
         plans: freePlan,
         start_date: null,
         end_date: null,
+      },
+      storage,
+      usage: {
+        usedBytes: storage?.used_bytes ?? 0,
+        limitBytes: storageLimit,
+        remainingBytes: Math.max(storageLimit - (storage?.used_bytes ?? 0), 0),
       },
     }, { status: 200 });
   } catch (error) {
@@ -45,57 +69,8 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const user = await getAuthenticatedUser(request);
-    const supabase = createSupabaseServerClient(request);
-    const adminSupabase = createSupabaseAdminClient();
-
-    if (!stripe) {
-      return Response.json({ error: "Stripe is not configured" }, { status: 500 });
-    }
-
-    const { planId, stripeMerchantId, paymentIntentId } = await request.json();
-    const effectivePaymentIntentId = paymentIntentId || stripeMerchantId;
-    if (!planId) return Response.json({ error: "Missing planId in request body" }, { status: 400 });
-    if (!effectivePaymentIntentId) {
-      return Response.json({ error: "Missing paymentIntentId in request body" }, { status: 400 });
-    }
-
-    const { data: newPlan, error: planError } = await supabase
-      .from("plans")
-      .select("id, name, storage_limit_bytes, price")
-      .eq("id", planId)
-      .single();
-    if (planError || !newPlan) return Response.json({ error: "Plan not found" }, { status: 404 });
-
-    const paymentIntent = await stripe.paymentIntents.retrieve(effectivePaymentIntentId);
-    if (paymentIntent.status !== "succeeded") {
-      return Response.json({ error: "Payment not successful for the new plan" }, { status: 402 });
-    }
-    if (paymentIntent.metadata?.supabaseUserId !== user.id) {
-      return Response.json({ error: "PaymentIntent does not belong to this user" }, { status: 403 });
-    }
-    if (String(paymentIntent.metadata?.planId || "") !== newPlan.id) {
-      return Response.json({ error: "PaymentIntent plan does not match selected plan" }, { status: 400 });
-    }
-
-    const { error: subscriptionError } = await adminSupabase
-      .from("subscriptions")
-      .upsert({
-        user_id: user.id,
-        plan_id: newPlan.id,
-        stripe_merchant_id: stripeMerchantId || null,
-        payment_intent_id: effectivePaymentIntentId,
-        start_date: new Date().toISOString(),
-        end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      }, { onConflict: "user_id" });
-    if (subscriptionError) throw subscriptionError;
-
-    const { error: storageError } = await adminSupabase
-      .from("user_storage")
-      .upsert({ user_id: user.id, plan_id: newPlan.id }, { onConflict: "user_id" });
-    if (storageError) throw storageError;
-
-    return Response.json({ message: "Subscription updated successfully" }, { status: 200 });
+    await getAuthenticatedUser(request);
+    return Response.json({ error: "Direct subscription activation is removed; use recurring checkout" }, { status: 410 });
   } catch (error) {
     if (error instanceof AuthError) {
       return Response.json({ error: error.message }, { status: error.status });
