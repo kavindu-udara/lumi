@@ -3,6 +3,21 @@ plugins {
     id 'com.google.gms.google-services'
 }
 
+def dotenv = [:]
+def dotenvFile = rootProject.file(".env")
+if (dotenvFile.isFile()) {
+    dotenvFile.eachLine { line ->
+        def match = line =~ /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*["']?(.*?)["']?\s*$/
+        if (match.matches()) {
+            dotenv[match.group(1)] = match.group(2)
+        }
+    }
+}
+
+def configValue = { String name ->
+    project.findProperty(name) ?: System.getenv(name) ?: dotenv[name] ?: ""
+}
+
 android {
     namespace 'com.example.lumi'
     compileSdk 36
@@ -15,6 +30,10 @@ android {
         versionName "1.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField "String", "SUPABASE_URL",
+                "\"${configValue("SUPABASE_URL")}\""
+        buildConfigField "String", "SUPABASE_PUBLISHABLE_KEY",
+                "\"${configValue("SUPABASE_PUBLISHABLE_KEY")}\""
     }
 
     buildTypes {
@@ -26,6 +45,9 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_11
         targetCompatibility JavaVersion.VERSION_11
+    }
+    buildFeatures {
+        buildConfig true
     }
 }
 
