@@ -297,7 +297,9 @@ public class ChangePlanFragment extends Fragment {
                         android.widget.Toast.makeText(requireContext(), "Unable to start checkout", android.widget.Toast.LENGTH_SHORT).show();
                         return;
                     }
-                    startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(checkoutUrl)));
+                    Intent checkoutIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(checkoutUrl));
+                    checkoutIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                    startActivity(checkoutIntent);
                     updateChangeButtonState();
                 });
             } catch (Exception e) {
