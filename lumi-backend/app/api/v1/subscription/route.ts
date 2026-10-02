@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
     const supabase = createSupabaseServerClient(request);
     const { data: subscription, error } = await supabase
       .from("subscriptions")
-      .select("id, user_id, plan_id, stripe_subscription_id, stripe_customer_id, status, current_period_start, current_period_end, cancel_at_period_end, cancelled_at, ended_at, pending_plan_id, pending_change_effective_at, start_date, end_date, plans(*)")
+      .select("id, user_id, plan_id, stripe_subscription_id, stripe_customer_id, status, current_period_start, current_period_end, cancel_at_period_end, cancelled_at, ended_at, pending_plan_id, pending_change_effective_at, start_date, end_date, plans!subscriptions_plan_id_fkey(*)")
       .eq("user_id", user.id)
       .order("start_date", { ascending: false })
       .limit(1)

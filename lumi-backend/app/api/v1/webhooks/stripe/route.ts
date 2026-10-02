@@ -14,6 +14,12 @@ function getSubscriptionObject(event: Stripe.Event) {
   return null;
 }
 
+function errorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error) return String(error.message);
+  return "Webhook processing failed";
+}
+
 async function resolvePlanId(
   adminSupabase: ReturnType<typeof createSupabaseAdminClient>,
   subscription: Stripe.Subscription,
@@ -137,7 +143,7 @@ export async function POST(request: NextRequest) {
   }
 
   const adminSupabase = createSupabaseAdminClient();
-  const { data: claimedEvent, error: claimError } = await adminSupabase
+  let { data: claimedEvent, error: claimError } = await adminSupabase
     .from("billing_events")
     .insert({
       stripe_event_id: event.id,
@@ -149,8 +155,31 @@ export async function POST(request: NextRequest) {
     .maybeSingle();
 
   if (claimError) {
-    if (claimError.code === "23505") return Response.json({ received: true, duplicate: true }, { status: 200 });
-    return Response.json({ error: "Failed to claim webhook event" }, { status: 500 });
+    if (claimError.code === "23505") {
+      const { data: existingEvent, error: existingEventError } = await adminSupabase
+        .from("billing_events")
+        .select("id, status")
+        .eq("stripe_event_id", event.id)
+        .single();
+      if (existingEventError || !existingEvent) {
+        return Response.json({ error: "Failed to inspect webhook event" }, { status: 500 });
+      }
+      if (existingEvent.status === "processed") {
+        return Response.json({ received: true, duplicate: true }, { status: 200 });
+      }
+      const { data: retriedEvent, error: retryError } = await adminSupabase
+        .from("billing_events")
+        .update({ status: "processing", error_message: null, processed_at: null })
+        .eq("id", existingEvent.id)
+        .select("id")
+        .single();
+      if (retryError || !retriedEvent) {
+        return Response.json({ error: "Failed to retry webhook event" }, { status: 500 });
+      }
+      claimedEvent = retriedEvent;
+    } else {
+      return Response.json({ error: "Failed to claim webhook event" }, { status: 500 });
+    }
   }
   if (!claimedEvent) return Response.json({ error: "Failed to claim webhook event" }, { status: 500 });
 
@@ -192,8 +221,9 @@ export async function POST(request: NextRequest) {
 
     return Response.json({ received: true }, { status: 200 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Webhook processing failed";
+    const message = errorMessage(error);
     await adminSupabase.from("billing_events").update({ status: "failed", error_message: message }).eq("id", claimedEvent.id);
+    console.error("Stripe webhook processing failed", { eventId: event.id, eventType: event.type, message });
     return Response.json({ error: "Webhook processing failed" }, { status: 500 });
   }
 }

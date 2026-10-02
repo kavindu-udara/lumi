@@ -1,6 +1,7 @@
 package com.example.lumi.activities;
 
 import android.content.SharedPreferences;
+import android.content.Intent;
 import android.os.Bundle;
 
 import androidx.activity.EdgeToEdge;
@@ -13,6 +14,7 @@ import androidx.fragment.app.Fragment;
 
 import com.example.lumi.R;
 import com.example.lumi.lib.API;
+import com.example.lumi.lib.Toast;
 import com.example.lumi.fragments.AlbumsFragment;
 import com.example.lumi.fragments.HomeFragment;
 import com.example.lumi.fragments.MapFragment;
@@ -73,6 +75,29 @@ public class MainActivity extends AppCompatActivity {
                     .replace(R.id.fragment_container, new HomeFragment())
                     .commit();
         }
+        handleBillingIntent(getIntent());
 
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleBillingIntent(intent);
+    }
+
+    private void handleBillingIntent(Intent intent) {
+        if (intent == null || intent.getData() == null
+                || !"billing".equals(intent.getData().getHost())) {
+            return;
+        }
+
+        String path = intent.getData().getPath();
+        if ("/success".equals(path)) {
+            Toast.success(this, "Subscription payment successful");
+        } else if ("/cancelled".equals(path)) {
+            Toast.warning(this, "Subscription payment canceled");
+        }
+        intent.setData(null);
     }
 }

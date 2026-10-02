@@ -19,12 +19,28 @@ export async function getOrCreateStripeCustomerId(userId: string, email?: string
     .limit(1)
     .maybeSingle();
 
-  if (existing?.stripe_customer_id) return existing.stripe_customer_id;
+  if (existing?.stripe_customer_id) {
+    try {
+      const customer = await stripeClient.customers.retrieve(existing.stripe_customer_id);
+      if (!customer.deleted) return customer.id;
+    } catch (error) {
+      const isMissingCustomer = error && typeof error === "object"
+        && "code" in error && error.code === "resource_missing";
+      if (!isMissingCustomer) throw error;
+    }
+  }
 
   const customer = await stripeClient.customers.create({
     email: email || undefined,
     metadata: { supabaseUserId: userId },
   });
+
+  const { error: updateError } = await adminSupabase
+    .from("subscriptions")
+    .update({ stripe_customer_id: customer.id })
+    .eq("user_id", userId);
+  if (updateError) throw updateError;
+
   return customer.id;
 }
 
