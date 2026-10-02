@@ -1,10 +1,13 @@
 package com.example.lumi.lib;
 
+import android.content.Context;
+import android.content.Intent;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
 
 import com.example.lumi.BuildConfig;
+import com.example.lumi.activities.SignIn;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -24,10 +27,15 @@ import okhttp3.Response;
 public class API {
 
     private static final String BASE_URL = normalizedBaseUrl();
+    private static Context appContext;
     OkHttpClient client;
 
     public API() {
         this.client = new OkHttpClient();
+    }
+
+    public static void initialize(Context context) {
+        appContext = context.getApplicationContext();
     }
 
     public String getBaseUrl() {
@@ -89,6 +97,9 @@ public class API {
                 .build();
 
         try (Response response = new OkHttpClient().newCall(request).execute()) {
+            if (handleUnauthorized(response)) {
+                return null;
+            }
             Gson gson = new Gson();
             return gson.fromJson(response.body().string(), JsonObject.class);
         }
@@ -104,6 +115,9 @@ public class API {
         }
 
         try (Response response = new OkHttpClient().newCall(requestBuilder.build()).execute()) {
+            if (handleUnauthorized(response)) {
+                return null;
+            }
             Gson gson = new Gson();
             String responseBody = response.body() != null ? response.body().string() : "";
             Log.i("API", "POST response code: " + response.code() + ", message: " + response.message() + ", body: " + responseBody);
@@ -121,6 +135,9 @@ public class API {
         }
 
         try (Response response = new OkHttpClient().newCall(requestBuilder.build()).execute()) {
+            if (handleUnauthorized(response)) {
+                return null;
+            }
             Gson gson = new Gson();
             String responseBody = response.body() != null ? response.body().string() : "";
             Log.i("API", "PUT response code: " + response.code() + ", message: " + response.message() + ", body: " + responseBody);
@@ -148,6 +165,9 @@ public class API {
         }
 
         try (Response response = new OkHttpClient().newCall(request).execute()) {
+            if (handleUnauthorized(response)) {
+                return null;
+            }
             Gson gson = new Gson();
             String responseBody = response.body() != null ? response.body().string() : "";
             Log.i("API", "GET response code: " + response.code() + ", message: " + response.message() + ", body: " + responseBody);
@@ -165,6 +185,9 @@ public class API {
         }
 
         try (Response response = new OkHttpClient().newCall(requestBuilder.build()).execute()) {
+            if (handleUnauthorized(response)) {
+                return null;
+            }
             Gson gson = new Gson();
             String responseBody = response.body() != null ? response.body().string() : "";
             Log.i("API", "DELETE response code: " + response.code() + ", message: " + response.message() + ", body: " + responseBody);
@@ -183,6 +206,9 @@ public class API {
         }
 
         try (Response response = new OkHttpClient().newCall(requestBuilder.build()).execute()) {
+            if (handleUnauthorized(response)) {
+                return null;
+            }
             Gson gson = new Gson();
 
             String responseBody = response.body() != null ? response.body().string() : "";
@@ -215,6 +241,9 @@ public class API {
         }
 
         try (Response response = new OkHttpClient().newCall(requestBuilder.build()).execute()) {
+            if (handleUnauthorized(response)) {
+                return false;
+            }
             Log.i("API", "Upload response code: " + response.code() + ", message: " + response.message());
             return response.isSuccessful();
         }
@@ -223,6 +252,20 @@ public class API {
 
     private static boolean hasToken(@Nullable String token) {
         return token != null && !token.trim().isEmpty();
+    }
+
+    private static boolean handleUnauthorized(Response response) {
+        if (response.code() != 401 || appContext == null) {
+            return false;
+        }
+
+        new SessionManager(appContext).clearSession();
+        Intent intent = new Intent(appContext, SignIn.class)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                        | Intent.FLAG_ACTIVITY_CLEAR_TASK
+                        | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        appContext.startActivity(intent);
+        return true;
     }
 
     private static String mediaTypeForFile(File file) {

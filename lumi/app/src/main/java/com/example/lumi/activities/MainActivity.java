@@ -12,6 +12,7 @@ import androidx.core.view.WindowInsetsCompat;
 import androidx.fragment.app.Fragment;
 
 import com.example.lumi.R;
+import com.example.lumi.lib.API;
 import com.example.lumi.fragments.AlbumsFragment;
 import com.example.lumi.fragments.HomeFragment;
 import com.example.lumi.fragments.MapFragment;
@@ -32,6 +33,7 @@ public class MainActivity extends AppCompatActivity {
         );
 
         super.onCreate(savedInstanceState);
+        API.initialize(this);
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
 
