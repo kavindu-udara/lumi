@@ -1,6 +1,8 @@
 package com.example.lumi.fragments;
 
 import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -61,7 +63,7 @@ public class ChangePlanFragment extends Fragment {
     // Replace this with your Stripe test publishable key.
     private static final String STRIPE_PUBLISHABLE_KEY = "pk_test_51TBATFJDQsecEfaDE0dK3VEfAc7cYnY2EijRRezu6qbrNxQF6oRbGMPSZoZIrmKPRvvPBNfDiqY3B4P9ciOpP9Eo00RIQYFCRk";
     private static final String STRIPE_MERCHANT_DISPLAY_NAME = "Lumi";
-    private static final String STRIPE_INTENT_ENDPOINT = "/payments/create-intent";
+    private static final String BILLING_CHECKOUT_ENDPOINT = "/billing/checkout";
 
     public ChangePlanFragment() {
         // Required empty public constructor for Fragment recreation.
@@ -265,84 +267,57 @@ public class ChangePlanFragment extends Fragment {
             return;
         }
 
-        // Free plan can be activated without payment intent.
-        if (selectedPlan.getPrice() <= 0d) {
-            sendSubscriptionUpdate(selectedPlan, "FREE_PLAN");
-            return;
-        }
-
-        startStripeSandboxPayment(selectedPlan);
+        startBillingCheckout(selectedPlan);
     }
 
-    private void startStripeSandboxPayment(Plan selectedPlan) {
-        if (mAuth.getCurrentUser() == null) {
+    private void startBillingCheckout(Plan selectedPlan) {
+        String accessToken = sessionManager.getToken();
+        if (accessToken == null || accessToken.trim().isEmpty()) {
             android.widget.Toast.makeText(requireContext(), "Please sign in again", android.widget.Toast.LENGTH_SHORT).show();
             return;
         }
 
-        String firebaseUid = mAuth.getCurrentUser().getUid();
         pendingPlanChange = selectedPlan;
         changeSubscriptionButton.setEnabled(false);
         changeSubscriptionButton.setAlpha(0.5f);
 
-        mAuth.getCurrentUser().getIdToken(false).addOnCompleteListener(task -> {
-            if (!task.isSuccessful() || task.getResult() == null || task.getResult().getToken() == null) {
-                updateChangeButtonState();
-                android.widget.Toast.makeText(requireContext(), "Please sign in again", android.widget.Toast.LENGTH_SHORT).show();
-                return;
-            }
+        new Thread(() -> {
+            try {
+                JsonObject body = new JsonObject();
+                body.addProperty("planId", selectedPlan.getId());
+                body.addProperty("successUrl", "lumi://billing/success");
+                body.addProperty("cancelUrl", "lumi://billing/cancelled");
 
-            String authToken = task.getResult().getToken();
-            new Thread(() -> {
-                try {
-                    String clientSecret = createPaymentIntentClientSecret(selectedPlan, authToken, firebaseUid);
-                    if (!isAdded()) {
-                        return;
-                    }
-
-                    if (clientSecret == null || clientSecret.trim().isEmpty()) {
-                        parent.runOnUiThread(() -> {
-                            updateChangeButtonState();
-                            android.widget.Toast.makeText(requireContext(), "Unable to start payment", android.widget.Toast.LENGTH_SHORT).show();
-                        });
-                        return;
-                    }
-
-                    pendingClientSecret = clientSecret;
-                    parent.runOnUiThread(() -> paymentSheet.presentWithPaymentIntent(
-                            clientSecret,
-                            new PaymentSheet.Configuration(STRIPE_MERCHANT_DISPLAY_NAME)
-                    ));
-                } catch (Exception e) {
-                    if (!isAdded()) {
-                        return;
-                    }
-                    parent.runOnUiThread(() -> {
+                JsonObject response = API.POST(BILLING_CHECKOUT_ENDPOINT, accessToken, body);
+                String checkoutUrl = extractCheckoutUrl(response);
+                if (!isAdded()) return;
+                parent.runOnUiThread(() -> {
+                    if (checkoutUrl == null) {
                         updateChangeButtonState();
-                        android.widget.Toast.makeText(requireContext(), "Payment init failed", android.widget.Toast.LENGTH_SHORT).show();
-                    });
-                }
-            }).start();
-        });
+                        android.widget.Toast.makeText(requireContext(), "Unable to start checkout", android.widget.Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(checkoutUrl)));
+                    updateChangeButtonState();
+                });
+            } catch (Exception e) {
+                if (!isAdded()) return;
+                parent.runOnUiThread(() -> {
+                    updateChangeButtonState();
+                    android.widget.Toast.makeText(requireContext(), "Checkout init failed", android.widget.Toast.LENGTH_SHORT).show();
+                });
+            }
+        }).start();
     }
 
-    private String createPaymentIntentClientSecret(Plan plan, String authToken, String firebaseUid) throws Exception {
-        JsonObject req = new JsonObject();
-        req.addProperty("amount", toMinorUnits(plan.getPrice()));
-        req.addProperty("currency", "usd");
-        req.addProperty("planId", plan.getId());
-        req.addProperty("firebaseUserId", firebaseUid);
-
-        JsonObject response = API.POST(STRIPE_INTENT_ENDPOINT, authToken, req);
-        if (response == null) {
-            return null;
-        }
-
-        if (response.has("clientSecret") && !response.get("clientSecret").isJsonNull()) {
-            return response.get("clientSecret").getAsString();
-        }
-        if (response.has("paymentIntentClientSecret") && !response.get("paymentIntentClientSecret").isJsonNull()) {
-            return response.get("paymentIntentClientSecret").getAsString();
+    private String extractCheckoutUrl(JsonObject response) {
+        if (response == null) return null;
+        String[] keys = {"checkoutUrl", "url", "sessionUrl"};
+        for (String key : keys) {
+            if (response.has(key) && !response.get(key).isJsonNull()) {
+                String value = response.get(key).getAsString();
+                if (!value.trim().isEmpty()) return value;
+            }
         }
         return null;
     }
