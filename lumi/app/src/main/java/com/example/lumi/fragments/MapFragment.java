@@ -83,7 +83,9 @@ public class MapFragment extends Fragment {
         loadingIndicator = view.findViewById(R.id.loadingIndicator);
         mAuth = FirebaseAuth.getInstance();
 
-        Configuration.getInstance().setUserAgentValue(requireContext().getPackageName());
+        Configuration.getInstance().setUserAgentValue(
+                "Lumi/1.0 (Android; " + requireContext().getPackageName() + ")"
+        );
         FrameLayout mapContainer = view.findViewById(R.id.map_container);
         mapView = new MapView(requireContext());
         mapContainer.addView(mapView, new FrameLayout.LayoutParams(
@@ -164,12 +166,15 @@ public class MapFragment extends Fragment {
             }
 
             JsonObject locObj = obj.getAsJsonObject("location");
-            if (!locObj.has("latitude") || !locObj.has("longitude")) {
+            if (!hasNumber(locObj, "latitude") || !hasNumber(locObj, "longitude")) {
                 continue;
             }
 
             double latitude = locObj.get("latitude").getAsDouble();
             double longitude = locObj.get("longitude").getAsDouble();
+            if (latitude < -90d || latitude > 90d || longitude < -180d || longitude > 180d) {
+                continue;
+            }
             String imageId = obj.get("imageId").getAsString();
 
             String photoId = obj.has("_id") && !obj.get("_id").isJsonNull()
@@ -181,6 +186,19 @@ public class MapFragment extends Fragment {
         }
 
         return locations;
+    }
+
+    private boolean hasNumber(JsonObject object, String fieldName) {
+        if (!object.has(fieldName) || object.get(fieldName).isJsonNull()
+                || !object.get(fieldName).isJsonPrimitive()) {
+            return false;
+        }
+        try {
+            double value = object.get(fieldName).getAsDouble();
+            return !Double.isNaN(value) && !Double.isInfinite(value);
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     private void placeMarkersOnMap() {
@@ -336,6 +354,4 @@ public class MapFragment extends Fragment {
         }
     }
 }
-
-
 
