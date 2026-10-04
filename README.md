@@ -35,7 +35,7 @@ flowchart LR
 ## Repository structure
 
 ```text
-assingment/
+/
 ├── lumi-backend/
 │   ├── app/
 │   ├── actions/
