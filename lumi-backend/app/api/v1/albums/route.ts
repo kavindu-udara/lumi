@@ -31,14 +31,18 @@ export async function POST(request: NextRequest) {
         const supabase = createSupabaseServerClient(request);
 
         // create an new album for the user with the given uid
-        const {name} = await request.json();
-        if(!name){
+        const { name } = await request.json();
+        const normalizedName = typeof name === "string" ? name.trim() : "";
+        if (!normalizedName) {
             return Response.json({ error: "Missing album name" }, { status: 400 });
+        }
+        if (normalizedName.length > 120) {
+            return Response.json({ error: "Album name must be 120 characters or fewer" }, { status: 400 });
         }
 
         const { data: newAlbum, error } = await supabase
             .from("albums")
-            .insert({ user_id: user.id, name: String(name).trim() })
+            .insert({ user_id: user.id, name: normalizedName })
             .select("id, user_id, name, description, cover_photo_path, created_at, updated_at")
             .single();
 
