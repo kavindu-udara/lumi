@@ -8,7 +8,7 @@ public class QueuedUploadItem {
     private long createdAt;
     private Double latitude;
     private Double longitude;
-    private String firebaseUserId;
+    private String userId;
 
     public QueuedUploadItem() {
         // Required for Gson deserialization.
@@ -21,7 +21,7 @@ public class QueuedUploadItem {
             long createdAt,
             Double latitude,
             Double longitude,
-            String firebaseUserId
+            String userId
     ) {
         this.id = id;
         this.filePath = filePath;
@@ -29,7 +29,7 @@ public class QueuedUploadItem {
         this.createdAt = createdAt;
         this.latitude = latitude;
         this.longitude = longitude;
-        this.firebaseUserId = firebaseUserId;
+        this.userId = userId;
     }
 
     public String getId() {
@@ -56,8 +56,7 @@ public class QueuedUploadItem {
         return longitude;
     }
 
-    public String getFirebaseUserId() {
-        return firebaseUserId;
+    public String getUserId() {
+        return userId;
     }
 }
-

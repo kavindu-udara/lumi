@@ -1,6 +1,5 @@
 plugins {
     alias(libs.plugins.android.application)
-    id 'com.google.gms.google-services'
 }
 
 def dotenv = [:]
@@ -67,14 +66,6 @@ dependencies {
     implementation "androidx.work:work-runtime:2.9.1"
     implementation "com.google.android.gms:play-services-location:21.3.0"
     implementation "org.osmdroid:osmdroid-android:6.1.18"
-
-//    firebase
-    implementation platform('com.google.firebase:firebase-bom:34.11.0')
-    implementation 'com.google.firebase:firebase-analytics'
-    // Import the Firebase BoM
-    implementation platform('com.google.firebase:firebase-bom:34.9.0')
-    // Add the dependency for Firebase Authentication
-    implementation 'com.google.firebase:firebase-auth'
 
     implementation libs.appcompat
     implementation libs.material

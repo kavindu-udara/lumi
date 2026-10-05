@@ -26,8 +26,6 @@ import com.example.lumi.lib.API;
 import com.example.lumi.lib.SessionManager;
 import com.example.lumi.lib.Toast;
 import com.google.android.material.card.MaterialCardView;
-import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseUser;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
@@ -40,7 +38,6 @@ public class SettingsFragment extends Fragment {
     private static final String KEY_DARK_THEME = "dark_theme";
 
     AppCompatActivity parent;
-    private FirebaseAuth firebaseAuth;
     private SessionManager sessionManager;
 
     public SettingsFragment() {
@@ -62,7 +59,6 @@ public class SettingsFragment extends Fragment {
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
-        firebaseAuth = FirebaseAuth.getInstance();
         sessionManager = new SessionManager(requireContext());
         SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE);
         boolean isDarkTheme = prefs.getBoolean(KEY_DARK_THEME, false);
@@ -373,7 +369,6 @@ public class SettingsFragment extends Fragment {
     }
 
     private void performLogout() {
-        FirebaseAuth.getInstance().signOut();
         new SessionManager(requireContext()).clearSession();
 
         Intent intent = new Intent(requireContext(), SignIn.class);

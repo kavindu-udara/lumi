@@ -27,7 +27,6 @@ import com.example.lumi.adapters.PlanAdapter;
 import com.example.lumi.lib.API;
 import com.example.lumi.lib.SessionManager;
 import com.example.lumi.models.Plan;
-import com.google.firebase.auth.FirebaseAuth;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -57,8 +56,6 @@ public class ChangePlanFragment extends Fragment {
     private PaymentSheet paymentSheet;
     private Plan pendingPlanChange;
     private String pendingClientSecret;
-
-    private FirebaseAuth mAuth;
 
     // Replace this with your Stripe test publishable key.
     private static final String STRIPE_PUBLISHABLE_KEY = "pk_test_51TBATFJDQsecEfaDE0dK3VEfAc7cYnY2EijRRezu6qbrNxQF6oRbGMPSZoZIrmKPRvvPBNfDiqY3B4P9ciOpP9Eo00RIQYFCRk";
@@ -194,8 +191,6 @@ public class ChangePlanFragment extends Fragment {
         changeSubscriptionButton.setOnClickListener(v -> onChangeSubscriptionClicked());
 
         sessionManager = new SessionManager(requireContext());
-        mAuth = FirebaseAuth.getInstance();
-
         PaymentConfiguration.init(requireContext(), STRIPE_PUBLISHABLE_KEY);
         paymentSheet = new PaymentSheet(this, this::onPaymentSheetResult);
 
@@ -344,7 +339,8 @@ public class ChangePlanFragment extends Fragment {
     }
 
     private void sendSubscriptionUpdate(Plan plan, String stripeMerchantId) {
-        if (mAuth.getCurrentUser() == null) {
+        String authToken = sessionManager.getToken();
+        if (authToken == null || authToken.trim().isEmpty()) {
             android.widget.Toast.makeText(requireContext(), "Please sign in again", android.widget.Toast.LENGTH_SHORT).show();
             updateChangeButtonState();
             return;
@@ -359,46 +355,33 @@ public class ChangePlanFragment extends Fragment {
         payload.addProperty("stripeMerchantId", stripeMerchantId);
         payload.addProperty("paymentIntentId", extractPaymentIntentId(pendingClientSecret));
 
-        mAuth.getCurrentUser().getIdToken(false).addOnCompleteListener(task -> {
-            if (!task.isSuccessful() || task.getResult() == null || task.getResult().getToken() == null) {
-                updateChangeButtonState();
-                android.widget.Toast.makeText(requireContext(), "Please sign in again", android.widget.Toast.LENGTH_SHORT).show();
-                return;
+        new Thread(() -> {
+            try {
+                API.PUT(endpoint, authToken, payload);
+                if (!isAdded()) return;
+                parent.runOnUiThread(() -> {
+                    activePlanId = plan.getId();
+                    selectedPlanId = plan.getId();
+                    adapter.setActivePlanId(activePlanId);
+                    adapter.setSelectedPlanId(selectedPlanId);
+                    selectedPlanText.setText("Selected plan: " + plan.getName());
+                    updateChangeButtonState();
+                    android.widget.Toast.makeText(requireContext(), "Subscription updated", android.widget.Toast.LENGTH_SHORT).show();
+                });
+            } catch (Exception e) {
+                if (!isAdded()) return;
+                parent.runOnUiThread(() -> {
+                    updateChangeButtonState();
+                    android.widget.Toast.makeText(requireContext(), "Failed to update subscription", android.widget.Toast.LENGTH_SHORT).show();
+                });
+            } finally {
+                pendingPlanChange = null;
+                pendingClientSecret = null;
             }
-
-            String authToken = task.getResult().getToken();
-            new Thread(() -> {
-                try {
-                    API.PUT(endpoint, authToken, payload);
-                    if (!isAdded()) {
-                        return;
-                    }
-                    parent.runOnUiThread(() -> {
-                        activePlanId = plan.getId();
-                        selectedPlanId = plan.getId();
-                        adapter.setActivePlanId(activePlanId);
-                        adapter.setSelectedPlanId(selectedPlanId);
-                        selectedPlanText.setText("Selected plan: " + plan.getName());
-                        updateChangeButtonState();
-                        android.widget.Toast.makeText(requireContext(), "Subscription updated", android.widget.Toast.LENGTH_SHORT).show();
-                    });
-                } catch (Exception e) {
-                    if (!isAdded()) {
-                        return;
-                    }
-                    parent.runOnUiThread(() -> {
-                        updateChangeButtonState();
-                        android.widget.Toast.makeText(requireContext(), "Failed to update subscription", android.widget.Toast.LENGTH_SHORT).show();
-                    });
-                } finally {
-                    pendingPlanChange = null;
-                    pendingClientSecret = null;
-                }
-            }).start();
-        });
+        }).start();
     }
 
-    private String fetchCurrentSubscriptionPlanId(String token, String firebaseUid) {
+    private String fetchCurrentSubscriptionPlanId(String token, String userId) {
         try {
             JsonElement response = API.GET("/subscription", token);
             if (response == null || !response.isJsonObject()) {

@@ -32,8 +32,6 @@ import com.example.lumi.lib.SessionManager;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseUser;
 
 import org.osmdroid.config.Configuration;
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory;
@@ -55,7 +53,6 @@ public class MapFragment extends Fragment {
     private AppCompatActivity parent;
     private MapView mapView;
     private ProgressBar loadingIndicator;
-    private FirebaseAuth mAuth;
     private final List<PhotoLocation> photoLocations = new ArrayList<>();
     private final List<Marker> currentMarkers = new ArrayList<>();
 
@@ -81,8 +78,6 @@ public class MapFragment extends Fragment {
                              @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_map, container, false);
         loadingIndicator = view.findViewById(R.id.loadingIndicator);
-        mAuth = FirebaseAuth.getInstance();
-
         Configuration.getInstance().setUserAgentValue(
                 "Lumi/1.0 (Android; " + requireContext().getPackageName() + ")"
         );
@@ -354,4 +349,3 @@ public class MapFragment extends Fragment {
         }
     }
 }
-
