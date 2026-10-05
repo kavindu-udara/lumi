@@ -58,14 +58,17 @@ create table if not exists public.notification_read_state (
   updated_at timestamptz not null default now()
 );
 
+drop trigger if exists broadcast_notifications_set_updated_at on public.broadcast_notifications;
 create trigger broadcast_notifications_set_updated_at
 before update on public.broadcast_notifications
 for each row execute function public.set_updated_at();
 
+drop trigger if exists user_notifications_set_updated_at on public.user_notifications;
 create trigger user_notifications_set_updated_at
 before update on public.user_notifications
 for each row execute function public.set_updated_at();
 
+drop trigger if exists notification_read_state_set_updated_at on public.notification_read_state;
 create trigger notification_read_state_set_updated_at
 before update on public.notification_read_state
 for each row execute function public.set_updated_at();

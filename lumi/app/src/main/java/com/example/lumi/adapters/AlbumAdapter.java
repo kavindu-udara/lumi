@@ -26,6 +26,8 @@ public class AlbumAdapter extends RecyclerView.Adapter<AlbumAdapter.AlbumViewHol
     public interface OnAlbumActionListener {
         void onEditAlbum(Album album);
         void onDeleteAlbum(Album album);
+        void onShareAlbum(Album album);
+        void onCloseShare(Album album);
     }
 
     private final List<Album> albums = new ArrayList<>();
@@ -111,10 +113,16 @@ public class AlbumAdapter extends RecyclerView.Adapter<AlbumAdapter.AlbumViewHol
         if (album == null || onAlbumActionListener == null) return;
         PopupMenu menu = new PopupMenu(anchor.getContext(), anchor);
         menu.getMenu().add("Edit");
+        menu.getMenu().add(album.isShared() ? "View website link" : "Publish as website");
+        if (album.isShared()) menu.getMenu().add("Close website");
         menu.getMenu().add("Delete");
         menu.setOnMenuItemClickListener(item -> {
             if ("Edit".contentEquals(item.getTitle())) {
                 onAlbumActionListener.onEditAlbum(album);
+            } else if ("Publish as website".contentEquals(item.getTitle()) || "View website link".contentEquals(item.getTitle())) {
+                onAlbumActionListener.onShareAlbum(album);
+            } else if ("Close website".contentEquals(item.getTitle())) {
+                onAlbumActionListener.onCloseShare(album);
             } else {
                 onAlbumActionListener.onDeleteAlbum(album);
             }
