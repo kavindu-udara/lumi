@@ -46,4 +46,15 @@
     <string name="loading">Loading</string>
     <string name="photo_uploaded_successfully">Photo uploaded successfully</string>
     <string name="video_uploaded_successfully">Video uploaded successfully</string>
+    <string name="album_share_title">Album website</string>
+    <string name="album_share_message">Anyone with this link can view and download this album.</string>
+    <string name="copy_link">Copy link</string>
+    <string name="close">Close</string>
+    <string name="album_link_copied">Album link copied</string>
+    <string name="album_share_failed">Failed to publish or load album website</string>
+    <string name="close_album_website_title">Close album website?</string>
+    <string name="close_album_website_message">The shared link will stop working. Your album and photos will not be deleted.</string>
+    <string name="close_website">Close website</string>
+    <string name="album_share_close_failed">Failed to close album website</string>
+    <string name="album_share_closed">Album website closed</string>
 </resources>

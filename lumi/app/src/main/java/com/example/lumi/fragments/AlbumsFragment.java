@@ -2,6 +2,8 @@ package com.example.lumi.fragments;
 
 import android.Manifest;
 import android.content.Context;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
@@ -116,6 +118,16 @@ public class AlbumsFragment extends Fragment {
             @Override
             public void onDeleteAlbum(Album album) {
                 confirmDeleteAlbum(album);
+            }
+
+            @Override
+            public void onShareAlbum(Album album) {
+                shareAlbum(album);
+            }
+
+            @Override
+            public void onCloseShare(Album album) {
+                confirmCloseShare(album);
             }
         });
         albumsRecyclerView.setAdapter(albumAdapter);
@@ -489,6 +501,108 @@ public class AlbumsFragment extends Fragment {
                 .show();
     }
 
+    private void shareAlbum(Album album) {
+        String token = sessionManager.getToken();
+        if (token == null) {
+            Toast.error(parent, "User not logged in");
+            return;
+        }
+        new Thread(() -> {
+            try {
+                JsonElement response;
+                if (album.isShared()) {
+                    response = API.GET("/albums/" + Uri.encode(album.getId()) + "/share", token);
+                } else {
+                    response = API.POST("/albums/" + Uri.encode(album.getId()) + "/share", token, new JsonObject());
+                }
+                String url = extractShareUrl(response);
+                parent.runOnUiThread(() -> {
+                    if (url == null) {
+                        Toast.error(parent, getString(R.string.album_share_failed));
+                        return;
+                    }
+                    album.setShared(true);
+                    album.setShareUrl(url);
+                    showShareDialog(url);
+                });
+            } catch (Exception error) {
+                parent.runOnUiThread(() -> Toast.error(parent, getString(R.string.album_share_failed)));
+            }
+        }).start();
+    }
+
+    private String extractShareUrl(JsonElement response) {
+        if (response == null || !response.isJsonObject()) return null;
+        JsonObject root = response.getAsJsonObject();
+        if (!root.has("share") || root.get("share").isJsonNull() || !root.get("share").isJsonObject()) return null;
+        JsonElement url = root.getAsJsonObject("share").get("url");
+        return url != null && url.isJsonPrimitive() && !url.getAsString().trim().isEmpty()
+                ? url.getAsString().trim() : null;
+    }
+
+    private void showShareDialog(String url) {
+        if (!isAdded()) return;
+        android.widget.LinearLayout content = new android.widget.LinearLayout(parent);
+        content.setOrientation(android.widget.LinearLayout.VERTICAL);
+        int padding = Math.round(24 * getResources().getDisplayMetrics().density);
+        content.setPadding(padding, padding, padding, 0);
+
+        TextView link = new TextView(parent);
+        link.setText(url);
+        link.setTextIsSelectable(true);
+        link.setAutoLinkMask(android.text.util.Linkify.WEB_URLS);
+        content.addView(link);
+
+        new AlertDialog.Builder(parent)
+                .setTitle(R.string.album_share_title)
+                .setMessage(R.string.album_share_message)
+                .setView(content)
+                .setNegativeButton(R.string.close, null)
+                .setPositiveButton(R.string.copy_link, (dialog, which) -> {
+                    ClipboardManager clipboard = (ClipboardManager) parent.getSystemService(Context.CLIPBOARD_SERVICE);
+                    if (clipboard != null) {
+                        clipboard.setPrimaryClip(ClipData.newPlainText("Lumi album link", url));
+                        Toast.success(parent, getString(R.string.album_link_copied));
+                    }
+                })
+                .show();
+    }
+
+    private void confirmCloseShare(Album album) {
+        if (!isAdded()) return;
+        new AlertDialog.Builder(parent)
+                .setTitle(R.string.close_album_website_title)
+                .setMessage(R.string.close_album_website_message)
+                .setNegativeButton(R.string.cancel, null)
+                .setPositiveButton(R.string.close_website, (dialog, which) -> closeShare(album))
+                .show();
+    }
+
+    private void closeShare(Album album) {
+        String token = sessionManager.getToken();
+        if (token == null) {
+            Toast.error(parent, "User not logged in");
+            return;
+        }
+        new Thread(() -> {
+            try {
+                JsonElement response = API.DELETE("/albums/" + Uri.encode(album.getId()) + "/share", token);
+                parent.runOnUiThread(() -> {
+                    if (response == null) {
+                        Toast.error(parent, getString(R.string.album_share_close_failed));
+                        return;
+                    }
+                    album.setShared(false);
+                    album.setShareUrl(null);
+                    Toast.success(parent, getString(R.string.album_share_closed));
+                    loadAlbums();
+                });
+            } catch (Exception error) {
+                parent.runOnUiThread(() -> Toast.error(parent, getString(R.string.album_share_close_failed)));
+            }
+        }).start();
+    }
+
     private void updateAlbum(Album album, String name) {
         String token = sessionManager.getToken();
         if (token == null) {
@@ -637,7 +751,11 @@ public class AlbumsFragment extends Fragment {
             String name = albumObject.has("name") && !albumObject.get("name").isJsonNull()
                     ? albumObject.get("name").getAsString()
                     : "Untitled";
-            albums.add(new Album(id, name));
+            Album album = new Album(id, name);
+            if (albumObject.has("album_shares") && albumObject.get("album_shares").isJsonArray()) {
+                album.setShared(albumObject.getAsJsonArray("album_shares").size() > 0);
+            }
+            albums.add(album);
         }
 
         return albums;
