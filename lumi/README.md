@@ -183,7 +183,7 @@ The Android manifest includes internet and location permissions, and the app con
 
 - https://developer.android.com/studio
 - https://supabase.com/docs
-- https://osmdroid.github.io/osmdroid/
+- Leaflet 1.9.4 with OpenStreetMap tiles is used for the in-app photo map.
 - https://stripe.com/docs/payments/checkout
 
 ## Notes for maintainers

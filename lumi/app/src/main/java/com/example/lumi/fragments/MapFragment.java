@@ -1,9 +1,5 @@
 package com.example.lumi.fragments;
 
-import android.graphics.BitmapFactory;
-import android.graphics.Bitmap;
-import android.graphics.drawable.BitmapDrawable;
-import android.graphics.drawable.Drawable;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
@@ -13,17 +9,16 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ProgressBar;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
 
-import com.bumptech.glide.Glide;
-import com.bumptech.glide.load.model.GlideUrl;
-import com.bumptech.glide.load.model.LazyHeaders;
-import com.bumptech.glide.request.target.CustomTarget;
-import com.bumptech.glide.request.transition.Transition;
 import com.example.lumi.R;
 import com.example.lumi.activities.PhotoViewerActivity;
 import com.example.lumi.adapters.HomeGalleryAdapter;
@@ -33,28 +28,24 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
-import org.osmdroid.config.Configuration;
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory;
-import org.osmdroid.util.GeoPoint;
-import org.osmdroid.views.MapView;
-import org.osmdroid.views.overlay.Marker;
-
 import java.util.ArrayList;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import com.google.gson.Gson;
 
 public class MapFragment extends Fragment {
 
-    private static final GeoPoint SRI_LANKA_CENTER = new GeoPoint(7.8731, 80.7718);
+    private static final double SRI_LANKA_LATITUDE = 7.8731;
+    private static final double SRI_LANKA_LONGITUDE = 80.7718;
     private static final double SRI_LANKA_ZOOM = 7.0;
 
     private AppCompatActivity parent;
-    private MapView mapView;
+    private WebView mapView;
     private ProgressBar loadingIndicator;
+    private boolean leafletLoaded;
     private final List<PhotoLocation> photoLocations = new ArrayList<>();
-    private final List<Marker> currentMarkers = new ArrayList<>();
 
     public MapFragment() {
         // Required empty public constructor for Fragment recreation.
@@ -78,20 +69,13 @@ public class MapFragment extends Fragment {
                              @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_map, container, false);
         loadingIndicator = view.findViewById(R.id.loadingIndicator);
-        Configuration.getInstance().setUserAgentValue(
-                "Lumi/1.0 (Android; " + requireContext().getPackageName() + ")"
-        );
         FrameLayout mapContainer = view.findViewById(R.id.map_container);
-        mapView = new MapView(requireContext());
+        mapView = new WebView(requireContext());
         mapContainer.addView(mapView, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
         ));
-        mapView.setTileSource(TileSourceFactory.MAPNIK);
-        mapView.setTilesScaledToDpi(true);
-        mapView.setMultiTouchControls(true);
-        mapView.getController().setCenter(SRI_LANKA_CENTER);
-        mapView.getController().setZoom(SRI_LANKA_ZOOM);
+        configureLeafletMap();
 
         loadPhotosAndPlaceMarkers();
 
@@ -102,8 +86,44 @@ public class MapFragment extends Fragment {
     public void onResume() {
         super.onResume();
         if (mapView != null) {
+            mapView.onResume();
             loadPhotosAndPlaceMarkers();
         }
+    }
+
+    @Override
+    public void onPause() {
+        if (mapView != null) {
+            mapView.onPause();
+        }
+        super.onPause();
+    }
+
+    @Override
+    public void onDestroyView() {
+        if (mapView != null) {
+            mapView.removeJavascriptInterface("LumiAndroid");
+            mapView.destroy();
+            mapView = null;
+        }
+        super.onDestroyView();
+    }
+
+    private void configureLeafletMap() {
+        WebSettings settings = mapView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(false);
+        mapView.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                leafletLoaded = true;
+                renderMarkersOnMap();
+            }
+        });
+        mapView.addJavascriptInterface(new LeafletBridge(), "LumiAndroid");
+        mapView.loadUrl("file:///android_asset/map.html");
     }
 
     private void loadPhotosAndPlaceMarkers() {
@@ -128,7 +148,7 @@ public class MapFragment extends Fragment {
 
                 parent.runOnUiThread(() -> {
                     loadingIndicator.setVisibility(View.GONE);
-                    placeMarkersOnMap();
+                    renderMarkersOnMap();
                 });
             } catch (Exception e) {
                 Log.e("MapFragment", "Failed to load map photos", e);
@@ -196,40 +216,14 @@ public class MapFragment extends Fragment {
         }
     }
 
-    private void placeMarkersOnMap() {
-        if (mapView == null || photoLocations.isEmpty()) {
+    private void renderMarkersOnMap() {
+        if (mapView == null || !leafletLoaded) {
             return;
         }
 
-        // Clear existing markers
-        for (Marker marker : currentMarkers) {
-            mapView.getOverlays().remove(marker);
-        }
-        currentMarkers.clear();
-
-        // Add markers
-        for (PhotoLocation loc : photoLocations) {
-            Marker marker = new Marker(mapView);
-            marker.setPosition(new GeoPoint(loc.latitude, loc.longitude));
-            marker.setTitle(loc.imageId);
-            marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
-            marker.setRelatedObject(loc);
-            currentMarkers.add(marker);
-            mapView.getOverlays().add(marker);
-
-            // Load preview image and set custom icon
-            loadPreviewForMarker(marker, loc.imageId);
-
-            marker.setOnMarkerClickListener((clickedMarker, mapView) -> {
-                Object related = clickedMarker.getRelatedObject();
-                if (related instanceof PhotoLocation) {
-                    openPhotoViewer((PhotoLocation) related);
-                    return true;
-                }
-                return false;
-            });
-        }
-        mapView.invalidate();
+        String locationsJson = new Gson().toJson(photoLocations);
+        String script = "window.renderPhotoMarkers(" + locationsJson + ");";
+        mapView.evaluateJavascript(script, null);
     }
 
     private void openPhotoViewer(PhotoLocation location) {
@@ -252,44 +246,14 @@ public class MapFragment extends Fragment {
         startActivity(intent);
     }
 
-    private void loadPreviewForMarker(Marker marker, String imageId) {
-        if (marker == null) {
-            return;
+    private class LeafletBridge {
+        @JavascriptInterface
+        public void onPhotoMarkerClicked(int index) {
+            if (index < 0 || index >= photoLocations.size() || !isAdded()) {
+                return;
+            }
+            parent.runOnUiThread(() -> openPhotoViewer(photoLocations.get(index)));
         }
-
-        SessionManager sessionManager = new SessionManager(requireContext());
-        GlideUrl previewUrl = new GlideUrl(
-            new API().getPreviewUrl(imageId),
-            new LazyHeaders.Builder()
-                .addHeader("Authorization", "Bearer " + sessionManager.getToken())
-                .build()
-        );
-
-        Glide.with(requireContext())
-                .asBitmap()
-                .load(previewUrl)
-                .override(100, 100)
-                .into(new CustomTarget<Bitmap>() {
-                    @Override
-                    public void onResourceReady(@NonNull Bitmap resource, @Nullable Transition<? super Bitmap> transition) {
-                        Bitmap scaledBitmap = Bitmap.createScaledBitmap(resource, 64, 64, false);
-                        marker.setIcon(new BitmapDrawable(requireContext().getResources(), scaledBitmap));
-                        if (mapView != null) {
-                            mapView.invalidate();
-                        }
-                    }
-
-                    @Override
-                    public void onLoadCleared(@Nullable Drawable placeholder) {
-                        marker.setIcon(new BitmapDrawable(
-                                requireContext().getResources(),
-                                BitmapFactory.decodeResource(requireContext().getResources(), org.osmdroid.library.R.drawable.marker_default)
-                        ));
-                        if (mapView != null) {
-                            mapView.invalidate();
-                        }
-                    }
-                });
     }
 
     private JsonArray toPhotoArray(JsonElement response) {
