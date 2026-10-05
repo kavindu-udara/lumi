@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import {
@@ -437,6 +438,12 @@ const AdminDashboard = () => {
             >
               Logout
             </button>
+            <Link
+              href="/admin/notifications"
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
+            >
+              Notifications
+            </Link>
           </div>
         </div>
 
