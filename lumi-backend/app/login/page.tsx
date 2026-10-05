@@ -170,10 +170,6 @@ const LoginPage = () => {
             )}
           </button>
         </form>
-
-        <div className="text-center text-sm text-gray-600">
-          <p>Use your seeded admin credentials.</p>
-        </div>
       </div>
     </div>
   );
