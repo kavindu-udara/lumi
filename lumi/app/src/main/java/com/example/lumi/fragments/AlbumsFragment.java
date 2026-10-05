@@ -107,7 +107,17 @@ public class AlbumsFragment extends Fragment {
 
         albumsRecyclerView = view.findViewById(R.id.albums_recycler_view);
         albumsRecyclerView.setLayoutManager(new LinearLayoutManager(parent));
-        albumAdapter = new AlbumAdapter(this::onAlbumSelected);
+        albumAdapter = new AlbumAdapter(this::onAlbumSelected, new AlbumAdapter.OnAlbumActionListener() {
+            @Override
+            public void onEditAlbum(Album album) {
+                showEditAlbumDialog(album);
+            }
+
+            @Override
+            public void onDeleteAlbum(Album album) {
+                confirmDeleteAlbum(album);
+            }
+        });
         albumsRecyclerView.setAdapter(albumAdapter);
 
         albumPhotosHeader = view.findViewById(R.id.album_photos_header);
@@ -439,9 +449,93 @@ public class AlbumsFragment extends Fragment {
                 createAlbum(albumName);
                 dialog.dismiss();
             }
+
         });
         
         dialog.show();
+    }
+
+    private void showEditAlbumDialog(Album album) {
+        if (album == null || !isAdded()) return;
+        View dialogView = LayoutInflater.from(parent).inflate(R.layout.dialog_create_album, null);
+        TextView title = dialogView.findViewById(R.id.album_dialog_title);
+        title.setText("Edit Album");
+        TextInputEditText input = dialogView.findViewById(R.id.album_name_input);
+        input.setText(album.getName());
+        input.setSelection(input.length());
+        AlertDialog dialog = new AlertDialog.Builder(parent).setView(dialogView).create();
+        dialogView.findViewById(R.id.btn_cancel).setOnClickListener(v -> dialog.dismiss());
+        TextView saveButton = dialogView.findViewById(R.id.btn_create);
+        saveButton.setText("Save");
+        saveButton.setOnClickListener(v -> {
+            String name = input.getText() == null ? "" : input.getText().toString().trim();
+            if (name.isEmpty()) {
+                Toast.warning(parent, "Album name cannot be empty");
+                return;
+            }
+            dialog.dismiss();
+            updateAlbum(album, name);
+        });
+        dialog.show();
+    }
+
+    private void confirmDeleteAlbum(Album album) {
+        if (album == null || !isAdded()) return;
+        new AlertDialog.Builder(parent)
+                .setTitle("Delete album?")
+                .setMessage("This will permanently delete the album and all photos in it.")
+                .setNegativeButton(R.string.cancel, null)
+                .setPositiveButton("Delete", (dialog, which) -> deleteAlbum(album))
+                .show();
+    }
+
+    private void updateAlbum(Album album, String name) {
+        String token = sessionManager.getToken();
+        if (token == null) {
+            Toast.error(parent, "User not logged in");
+            return;
+        }
+        new Thread(() -> {
+            try {
+                JsonObject body = new JsonObject();
+                body.addProperty("name", name);
+                JsonElement response = API.PUT("/albums/" + Uri.encode(album.getId()), token, body);
+                parent.runOnUiThread(() -> {
+                    if (response != null) {
+                        Toast.success(parent, "Album updated successfully");
+                        loadAlbums();
+                    } else {
+                        Toast.error(parent, "Failed to update album");
+                    }
+                });
+            } catch (Exception error) {
+                parent.runOnUiThread(() -> Toast.error(parent, "Failed to update album"));
+            }
+        }).start();
+    }
+
+    private void deleteAlbum(Album album) {
+        String token = sessionManager.getToken();
+        if (token == null) {
+            Toast.error(parent, "User not logged in");
+            return;
+        }
+        new Thread(() -> {
+            try {
+                JsonElement response = API.DELETE("/albums/" + Uri.encode(album.getId()), token);
+                parent.runOnUiThread(() -> {
+                    if (response != null) {
+                        if (album.getId().equals(selectedAlbumId)) showAlbumList();
+                        Toast.success(parent, "Album deleted successfully");
+                        loadAlbums();
+                    } else {
+                        Toast.error(parent, "Failed to delete album");
+                    }
+                });
+            } catch (Exception error) {
+                parent.runOnUiThread(() -> Toast.error(parent, "Failed to delete album"));
+            }
+        }).start();
     }
 
     private void createAlbum(String albumName) {
