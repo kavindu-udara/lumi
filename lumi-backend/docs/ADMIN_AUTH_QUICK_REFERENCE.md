@@ -5,15 +5,22 @@
 ### 1. Setup Environment
 ```bash
 # Copy and update .env.local
-JWT_SECRET=your-secret-key-here
-MONGO_URI=mongodb://localhost:27017/lumi
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SECRET_KEY=your-server-only-service-role-key
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=use-a-strong-password-at-least-12-characters
+ADMIN_DISPLAY_NAME=Lumi Administrator
 ```
 
 ### 2. Create Admin User
 ```bash
-npm run db:seed
-# Or manually create via MongoDB with bcrypt-hashed password
+npm run db:seed:admin
 ```
+
+The seeder is idempotent: it creates the Supabase Auth user when absent and
+upserts the `admin` role and profile when the user already exists. It does not
+print or reset the password for an existing user. Keep `SUPABASE_SECRET_KEY`
+server-side and never put it in the Android app or browser.
 
 ### 3. Start Development
 ```bash
@@ -30,6 +37,14 @@ npm run dev
 - Auto-redirects to `/admin/dashboard` on success
 - Error/success messages
 - Loading states
+
+### Broadcast notifications
+
+Authorized admins can open `/admin/notifications` from the dashboard to send a
+Supabase Realtime broadcast to eligible authenticated Android users. Broadcasts
+and per-user notification rows are stored in Supabase and can be reviewed in
+the history list. This feature is in-app/reconnect delivery only; it does not
+provide native OS push while the Android process is fully stopped.
 
 ---
 

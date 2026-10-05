@@ -66,27 +66,17 @@ JWT_EXPIRES_IN=7d
 ```
 
 ### 2. Create Admin User
-Use the seeder or create manually in MongoDB:
+Set the server-only Supabase seeder variables and run:
 
-```javascript
-{
-  username: "admin",
-  password: "$2b$10$..." // Hashed password using bcrypt
-}
-```
-
-To hash a password:
 ```bash
-npm install bcrypt-cli -g
-bcrypt-cli "admin123"
+ADMIN_EMAIL=admin@example.com \
+ADMIN_PASSWORD='use-a-strong-password-at-least-12-characters' \
+npm run db:seed:admin
 ```
 
-Or manually seed via Node:
-```javascript
-const bcrypt = require('bcrypt');
-const hashedPassword = await bcrypt.hash('admin123', 10);
-console.log(hashedPassword);
-```
+The seeder creates or finds the Supabase Auth user, grants the `admin` role in
+`public.user_roles`, and creates/updates the corresponding profile. It is
+idempotent and does not print or reset an existing user's password.
 
 ### 3. Update Admin Model (if needed)
 The admin model is already set up at `models/admin.model.ts` with:
