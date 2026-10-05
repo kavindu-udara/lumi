@@ -394,11 +394,13 @@ public class ChangePlanFragment extends Fragment {
             }
 
             JsonObject subscription = root.getAsJsonObject("subscription");
-            if (!subscription.has("planId") || subscription.get("planId").isJsonNull()) {
+            JsonElement planId = subscription.has("plan_id")
+                    ? subscription.get("plan_id")
+                    : subscription.get("planId");
+            if (planId == null || planId.isJsonNull()) {
                 return null;
             }
 
-            JsonElement planId = subscription.get("planId");
             if (planId.isJsonPrimitive()) {
                 return planId.getAsString();
             }
