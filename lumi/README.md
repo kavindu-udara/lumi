@@ -100,7 +100,6 @@ lumi/
 │   │   │   │   └── workers/
 │   │   │   └── res/
 │   │   └── androidTest/
-│   └── google-services.json
 ├── build.gradle
 ├── gradlew
 ├── gradlew.bat
@@ -183,14 +182,13 @@ The Android manifest includes internet and location permissions, and the app con
 ## External references
 
 - https://developer.android.com/studio
-- https://firebase.google.com/docs
 - https://supabase.com/docs
 - https://osmdroid.github.io/osmdroid/
 - https://stripe.com/docs/payments/checkout
 
 ## Notes for maintainers
 
-The codebase still includes a mix of older and newer integration patterns. Some documentation references older Firebase workflows, while the app also includes Supabase and backend integration logic. The project is best understood as a hybrid mobile client backed by a secure backend service that manages identity, media, storage limits, and subscription billing.
+The Android client uses Supabase Auth and Supabase Realtime for identity and in-app broadcast notifications. The backend manages identity, media, storage limits, subscription billing, and notification history.
 
 ## Summary
 
