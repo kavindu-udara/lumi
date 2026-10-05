@@ -1,8 +1,11 @@
 package com.example.lumi.adapters;
 
 import android.view.ViewGroup;
+import android.view.View;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.ImageButton;
+import android.widget.PopupMenu;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
@@ -20,11 +23,22 @@ public class AlbumAdapter extends RecyclerView.Adapter<AlbumAdapter.AlbumViewHol
         void onAlbumClick(Album album);
     }
 
+    public interface OnAlbumActionListener {
+        void onEditAlbum(Album album);
+        void onDeleteAlbum(Album album);
+    }
+
     private final List<Album> albums = new ArrayList<>();
     private final OnAlbumClickListener onAlbumClickListener;
+    private final OnAlbumActionListener onAlbumActionListener;
 
     public AlbumAdapter(OnAlbumClickListener onAlbumClickListener) {
+        this(onAlbumClickListener, null);
+    }
+
+    public AlbumAdapter(OnAlbumClickListener onAlbumClickListener, OnAlbumActionListener onAlbumActionListener) {
         this.onAlbumClickListener = onAlbumClickListener;
+        this.onAlbumActionListener = onAlbumActionListener;
     }
 
     public void submitAlbums(List<Album> items) {
@@ -52,7 +66,8 @@ public class AlbumAdapter extends RecyclerView.Adapter<AlbumAdapter.AlbumViewHol
         card.setStrokeWidth(dp(parent, 1));
 
         LinearLayout container = new LinearLayout(parent.getContext());
-        container.setOrientation(LinearLayout.VERTICAL);
+        container.setOrientation(LinearLayout.HORIZONTAL);
+        container.setGravity(android.view.Gravity.CENTER_VERTICAL);
         int p = dp(parent, 16);
         container.setPadding(p, p, p, p);
 
@@ -60,21 +75,52 @@ public class AlbumAdapter extends RecyclerView.Adapter<AlbumAdapter.AlbumViewHol
         albumName.setTextSize(16f);
         albumName.setTextColor(parent.getResources().getColor(android.R.color.black, null));
 
+        LinearLayout.LayoutParams nameLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        albumName.setLayoutParams(nameLp);
         container.addView(albumName);
+
+        ImageButton optionsButton = new ImageButton(parent.getContext());
+        optionsButton.setImageResource(android.R.drawable.ic_menu_more);
+        optionsButton.setContentDescription("Album options");
+        optionsButton.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        optionsButton.setOnClickListener(v -> showOptions(v, getBoundAlbum(v)));
+        container.addView(optionsButton, new LinearLayout.LayoutParams(dp(parent, 48), dp(parent, 48)));
         card.addView(container);
 
-        return new AlbumViewHolder(card, albumName);
+        return new AlbumViewHolder(card, albumName, optionsButton);
     }
 
     @Override
     public void onBindViewHolder(@NonNull AlbumViewHolder holder, int position) {
         Album album = albums.get(position);
         holder.albumName.setText(album.getName());
+        holder.optionsButton.setTag(album);
         holder.itemView.setOnClickListener(v -> {
             if (onAlbumClickListener != null) {
                 onAlbumClickListener.onAlbumClick(album);
             }
         });
+    }
+
+    private Album getBoundAlbum(View view) {
+        Object tag = view.getTag();
+        return tag instanceof Album ? (Album) tag : null;
+    }
+
+    private void showOptions(View anchor, Album album) {
+        if (album == null || onAlbumActionListener == null) return;
+        PopupMenu menu = new PopupMenu(anchor.getContext(), anchor);
+        menu.getMenu().add("Edit");
+        menu.getMenu().add("Delete");
+        menu.setOnMenuItemClickListener(item -> {
+            if ("Edit".contentEquals(item.getTitle())) {
+                onAlbumActionListener.onEditAlbum(album);
+            } else {
+                onAlbumActionListener.onDeleteAlbum(album);
+            }
+            return true;
+        });
+        menu.show();
     }
 
     @Override
@@ -84,10 +130,12 @@ public class AlbumAdapter extends RecyclerView.Adapter<AlbumAdapter.AlbumViewHol
 
     public static class AlbumViewHolder extends RecyclerView.ViewHolder {
         final TextView albumName;
+        final ImageButton optionsButton;
 
-        AlbumViewHolder(@NonNull MaterialCardView itemView, TextView albumName) {
+        AlbumViewHolder(@NonNull MaterialCardView itemView, TextView albumName, ImageButton optionsButton) {
             super(itemView);
             this.albumName = albumName;
+            this.optionsButton = optionsButton;
         }
     }
 
@@ -96,4 +144,3 @@ public class AlbumAdapter extends RecyclerView.Adapter<AlbumAdapter.AlbumViewHol
         return Math.round(value * density);
     }
 }
-
