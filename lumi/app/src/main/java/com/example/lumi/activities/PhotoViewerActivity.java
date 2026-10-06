@@ -6,6 +6,10 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.util.Log;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.widget.ImageButton;
 import android.widget.TextView;
 import android.view.View;
@@ -44,10 +48,12 @@ import java.util.Date;
 import java.util.Locale;
 import java.util.concurrent.Executors;
 
-public class PhotoViewerActivity extends AppCompatActivity {
+public class PhotoViewerActivity extends AppCompatActivity implements SensorEventListener {
 
     public static final String EXTRA_START_INDEX = "start_index";
     public static final String EXTRA_ITEMS = "items";
+    private static final float SHAKE_THRESHOLD = 2.7f;
+    private static final long SHAKE_COOLDOWN_MS = 1500L;
 
     private ViewPager2 viewPager;
     private TextView positionText;
@@ -55,6 +61,10 @@ public class PhotoViewerActivity extends AppCompatActivity {
     private ArrayList<HomeGalleryAdapter.GalleryItem> items;
     private int currentIndex;
     private UploadQueueStore uploadQueueStore;
+    private SensorManager sensorManager;
+    private Sensor accelerometer;
+    private long lastShakeAt;
+    private BottomSheetDialog deleteBottomSheetDialog;
 
     private SessionManager sessionManager;
 
@@ -74,6 +84,10 @@ public class PhotoViewerActivity extends AppCompatActivity {
 
         uploadQueueStore = new UploadQueueStore(this);
         sessionManager = new SessionManager(this);
+        sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
+        if (sensorManager != null) {
+            accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+        }
 
         items = readItemsFromIntent(getIntent());
         currentIndex = getIntent().getIntExtra(EXTRA_START_INDEX, 0);
@@ -107,6 +121,45 @@ public class PhotoViewerActivity extends AppCompatActivity {
         deleteButton.setOnClickListener(v -> showDeleteBottomSheet());
         detailsButton.setOnClickListener(v -> showCurrentImageDetails());
         updatePlayButton(playButton);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (sensorManager != null && accelerometer != null) {
+            sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_UI);
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        if (sensorManager != null) {
+            sensorManager.unregisterListener(this);
+        }
+        super.onPause();
+    }
+
+    @Override
+    public void onSensorChanged(SensorEvent event) {
+        if (event.sensor.getType() != Sensor.TYPE_ACCELEROMETER) {
+            return;
+        }
+
+        float acceleration = (float) Math.sqrt(
+                event.values[0] * event.values[0]
+                        + event.values[1] * event.values[1]
+                        + event.values[2] * event.values[2]
+        ) / SensorManager.GRAVITY_EARTH;
+        long now = System.currentTimeMillis();
+        if (acceleration >= SHAKE_THRESHOLD && now - lastShakeAt >= SHAKE_COOLDOWN_MS) {
+            lastShakeAt = now;
+            showDeleteBottomSheet();
+        }
+    }
+
+    @Override
+    public void onAccuracyChanged(Sensor sensor, int accuracy) {
+        // No accuracy adjustment is needed for shake detection.
     }
 
     private void updatePlayButton(ImageButton playButton) {
@@ -264,11 +317,13 @@ public class PhotoViewerActivity extends AppCompatActivity {
 
     private void showDeleteBottomSheet() {
         HomeGalleryAdapter.GalleryItem item = getCurrentItem();
-        if (item == null) {
+        if (item == null || (deleteBottomSheetDialog != null && deleteBottomSheetDialog.isShowing())) {
             return;
         }
 
         BottomSheetDialog bottomSheetDialog = new BottomSheetDialog(this);
+        deleteBottomSheetDialog = bottomSheetDialog;
+        bottomSheetDialog.setOnDismissListener(dialog -> deleteBottomSheetDialog = null);
         android.widget.LinearLayout root = new android.widget.LinearLayout(this);
         root.setOrientation(android.widget.LinearLayout.VERTICAL);
         int pad = dp(16);
