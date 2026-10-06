@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
+import { AdminAnalytics } from "./AdminAnalytics";
 import {
   adminDeleteRequest,
   adminGetRequest,
@@ -424,7 +425,7 @@ const AdminDashboard = () => {
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-slate-100 text-slate-900">
-        <div className="bg-white shadow-sm border-b border-slate-200">
+        <div className="bg-white shadow-sm border-b border-slate-200 print:hidden">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-2xl font-bold text-slate-900">Admin Data Manager</h1>
@@ -447,7 +448,10 @@ const AdminDashboard = () => {
           </div>
         </div>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 grid grid-cols-1 xl:grid-cols-12 gap-6">
+        <div className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
+          <AdminAnalytics />
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-12 print:hidden">
           <div className="xl:col-span-4 bg-white rounded-lg shadow p-5">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-slate-900">
@@ -646,6 +650,7 @@ const AdminDashboard = () => {
             </div>
           </div>
         )}
+      </div>
       </div>
     </ProtectedRoute>
   );
