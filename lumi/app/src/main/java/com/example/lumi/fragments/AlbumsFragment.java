@@ -753,7 +753,18 @@ public class AlbumsFragment extends Fragment {
                     : "Untitled";
             Album album = new Album(id, name);
             if (albumObject.has("album_shares") && albumObject.get("album_shares").isJsonArray()) {
-                album.setShared(albumObject.getAsJsonArray("album_shares").size() > 0);
+                boolean hasActiveShare = false;
+                for (JsonElement shareElement : albumObject.getAsJsonArray("album_shares")) {
+                    if (!shareElement.isJsonObject()) {
+                        continue;
+                    }
+                    JsonElement revokedAt = shareElement.getAsJsonObject().get("revoked_at");
+                    if (revokedAt == null || revokedAt.isJsonNull() || revokedAt.getAsString().trim().isEmpty()) {
+                        hasActiveShare = true;
+                        break;
+                    }
+                }
+                album.setShared(hasActiveShare);
             }
             albums.add(album);
         }

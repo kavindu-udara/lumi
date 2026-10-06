@@ -9,8 +9,9 @@ export async function GET(request: NextRequest) {
         const supabase = createSupabaseServerClient(request);
         const { data: albums, error } = await supabase
             .from("albums")
-            .select("id, user_id, name, description, cover_photo_path, created_at, updated_at, album_shares(id, created_at)")
+            .select("id, user_id, name, description, cover_photo_path, created_at, updated_at, album_shares(id, created_at, revoked_at)")
             .eq("user_id", user.id)
+            .is("album_shares.revoked_at", null)
             .order("created_at", { ascending: true });
 
         if (error) throw error;
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
         const { data: newAlbum, error } = await supabase
             .from("albums")
             .insert({ user_id: user.id, name: normalizedName })
-            .select("id, user_id, name, description, cover_photo_path, created_at, updated_at, album_shares(id, created_at)")
+            .select("id, user_id, name, description, cover_photo_path, created_at, updated_at, album_shares(id, created_at, revoked_at)")
             .single();
 
         if (error) {
