@@ -19,7 +19,6 @@ export const useAdminAuth = () => {
   useEffect(() => {
     const token = getAdminToken();
     if (!token) {
-      setAuthState({ isAuthenticated: false, adminData: null, loading: false });
       router.push("/login");
       return;
     }

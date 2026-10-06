@@ -143,7 +143,7 @@ export async function POST(request: NextRequest) {
   }
 
   const adminSupabase = createSupabaseAdminClient();
-  let { data: claimedEvent, error: claimError } = await adminSupabase
+  const { data: initialClaimedEvent, error: claimError } = await adminSupabase
     .from("billing_events")
     .insert({
       stripe_event_id: event.id,
@@ -153,6 +153,7 @@ export async function POST(request: NextRequest) {
     })
     .select("id")
     .maybeSingle();
+  let claimedEvent = initialClaimedEvent;
 
   if (claimError) {
     if (claimError.code === "23505") {

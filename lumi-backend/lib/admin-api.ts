@@ -33,7 +33,7 @@ export const authenticatedFetch = async (
  */
 export const adminPostRequest = async <T>(
   url: string,
-  data: Record<string, any>
+  data: Record<string, unknown>
 ): Promise<T> => {
   const response = await authenticatedFetch(url, {
     method: "POST",
@@ -73,7 +73,7 @@ export const adminGetRequest = async <T>(url: string): Promise<T> => {
  */
 export const adminPutRequest = async <T>(
   url: string,
-  data: Record<string, any>
+  data: Record<string, unknown>
 ): Promise<T> => {
   const response = await authenticatedFetch(url, {
     method: "PUT",
