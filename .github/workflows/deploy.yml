@@ -28,14 +28,18 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: lumi-backend/package-lock.json
 
       - name: Install dependencies
+        working-directory: lumi-backend
         run: npm ci
 
       - name: Run lint
+        working-directory: lumi-backend
         run: npm run lint
 
       - name: Build application
+        working-directory: lumi-backend
         run: npm run build
 
   deploy:
