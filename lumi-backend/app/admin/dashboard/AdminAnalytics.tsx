@@ -129,6 +129,39 @@ const BarChart = ({
   );
 };
 
+const VerticalBarChart = ({ items }: {
+  items: Array<{ label: string; value: number }>;
+}) => {
+  const max = Math.max(...items.map((item) => item.value), 1);
+
+  if (items.length === 0) {
+    return <p className="text-sm text-slate-500">No uploads in this period.</p>;
+  }
+
+  return (
+    <div className="relative">
+      <div className="pointer-events-none absolute inset-x-0 top-0 flex h-40 flex-col justify-between">
+        {[100, 75, 50, 25, 0].map((value) => (
+          <div key={value} className="border-t border-dashed border-slate-200" />
+        ))}
+      </div>
+      <div className="relative flex h-40 items-end gap-2 px-1 sm:gap-4">
+        {items.map((item) => (
+          <div key={item.label} className="flex min-w-0 flex-1 flex-col items-center justify-end gap-2">
+            <span className="text-xs font-semibold text-slate-600">{item.value}</span>
+            <div
+              className="w-full max-w-12 rounded-t-lg bg-gradient-to-t from-indigo-600 to-cyan-400 transition-all hover:from-indigo-500 hover:to-cyan-300"
+              style={{ height: `${Math.max((item.value / max) * 100, item.value ? 6 : 0)}%` }}
+              title={`${item.label}: ${item.value} uploads`}
+            />
+            <span className="w-full truncate text-center text-[10px] text-slate-500">{item.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const Metric = ({ label, value, detail, accent }: {
   label: string;
   value: string;
@@ -283,6 +316,19 @@ export const AdminAnalytics = () => {
               <BarChart items={analysis.planCounts} color="bg-emerald-500" />
             </article>
           </div>
+
+          <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-6 flex items-start justify-between">
+              <div>
+                <h3 className="font-semibold text-slate-950">Upload volume</h3>
+                <p className="mt-1 text-sm text-slate-500">Vertical bar chart of media uploads over time</p>
+              </div>
+              <span className="rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-700">
+                {formatNumber(analysis.recentImages.length)} uploads
+              </span>
+            </div>
+            <VerticalBarChart items={analysis.monthCounts} />
+          </article>
 
           <div className="grid gap-6 lg:grid-cols-[1fr_1.45fr]">
             <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm print:hidden">
