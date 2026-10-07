@@ -102,6 +102,10 @@ public class AlbumAdapter extends RecyclerView.Adapter<AlbumAdapter.AlbumViewHol
                 onAlbumClickListener.onAlbumClick(album);
             }
         });
+        holder.itemView.setOnLongClickListener(v -> {
+            showOptions(v, album);
+            return true;
+        });
     }
 
     private Album getBoundAlbum(View view) {
